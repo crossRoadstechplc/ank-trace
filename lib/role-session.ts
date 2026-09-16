@@ -1,0 +1,48 @@
+/** Session-only role binding (not persisted to Postgres). */
+
+export type SessionRole = "farmer" | "akrabi" | "exporter";
+
+export type RoleSession = {
+  role: SessionRole;
+  /** Stable seed identity — survives ledger re-bootstrap across page loads. */
+  legalIdentityRef: string;
+};
+
+export const ROLE_SESSION_KEY = "ank_role";
+
+export const SESSION_ROLE_LABELS: Record<SessionRole, string> = {
+  farmer: "Farmer",
+  akrabi: "Aggregator",
+  exporter: "Exporter",
+};
+
+export function getRoleSession(): RoleSession | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(ROLE_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as RoleSession & { actorId?: string };
+    if (
+      !parsed ||
+      (parsed.role !== "farmer" && parsed.role !== "akrabi" && parsed.role !== "exporter")
+    ) {
+      return null;
+    }
+    // Migrate legacy { role, actorId } by treating as invalid — force re-pick
+    if (typeof parsed.legalIdentityRef !== "string" || !parsed.legalIdentityRef) {
+      return null;
+    }
+    return { role: parsed.role, legalIdentityRef: parsed.legalIdentityRef };
+  } catch {
+    return null;
+  }
+}
+
+export function setRoleSession(session: RoleSession): void {
+  sessionStorage.setItem(ROLE_SESSION_KEY, JSON.stringify(session));
+}
+
+export function clearRoleSession(): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(ROLE_SESSION_KEY);
+}
