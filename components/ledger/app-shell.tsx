@@ -18,16 +18,18 @@ import { useLedger } from "./ledger-context";
 
 type AppShellProps = {
   children: ReactNode;
-  userEmail: string;
+  userName: string;
+  companyName: string;
+  userContact: string;
 };
 
 const NAV = [
   { href: "/workspace", label: "Workspace" },
-  { href: "/network", label: "Network" },
+  { href: "/network", label: "My Network" },
   { href: "/inspector", label: "Ledger inspector" },
 ] as const;
 
-export function AppShell({ children, userEmail }: AppShellProps) {
+export function AppShell({ children, userName, companyName, userContact }: AppShellProps) {
   const pathname = usePathname();
   const { ledger, actingActorId, sessionRole, refresh, toast } = useLedger();
   const [onboardOpen, setOnboardOpen] = useState(false);
@@ -42,6 +44,9 @@ export function AppShell({ children, userEmail }: AppShellProps) {
     if (primary === "addFarmer") return "+ Add new farmer";
     return null;
   }, [primary]);
+
+  const personLabel = userName || userContact || "Signed in";
+  const companyLabel = companyName || null;
 
   async function signOut() {
     setBusyLogout(true);
@@ -64,7 +69,14 @@ export function AppShell({ children, userEmail }: AppShellProps) {
           <div className="masthead-copy">
             <h1>{actor ? actor.displayName : "Coffee lot ledger"}</h1>
             <p>
-              Signed in as {SESSION_ROLE_LABELS[sessionRole]}. You only see the network and lots
+              Signed in as <b>{personLabel}</b>
+              {companyLabel ? (
+                <>
+                  {" "}
+                  · <b>{companyLabel}</b>
+                </>
+              ) : null}
+              . Viewing as {SESSION_ROLE_LABELS[sessionRole]} — you only see the network and lots
               valid for this role.
             </p>
           </div>
@@ -74,9 +86,22 @@ export function AppShell({ children, userEmail }: AppShellProps) {
       <div className="toolbar">
         <div className="shell-inner toolbar-inner">
           <div className="toolbar-left">
+            <button
+              type="button"
+              className="toolbar-back"
+              aria-label="Back to Role Selection"
+              title="Back to Role Selection"
+              onClick={() => {
+                clearRoleSession();
+                window.location.href = "/select-role";
+              }}
+            >
+              ←
+            </button>
             <div className="identity-block">
-              <span className="identity-name">{actor?.displayName ?? "—"}</span>
+              <span className="identity-name">{personLabel}</span>
               <span className="identity-sub">
+                {companyLabel ? `${companyLabel} · ` : ""}
                 {SESSION_ROLE_LABELS[sessionRole]}
                 {actor?.legalIdentityRef ? ` · ${actor.legalIdentityRef}` : ""}
               </span>
@@ -99,7 +124,6 @@ export function AppShell({ children, userEmail }: AppShellProps) {
             ))}
           </nav>
           <div className="toolbar-right">
-            <span className="app-user">{userEmail}</span>
             <button type="button" className="secondary" disabled={busyLogout} onClick={signOut}>
               {busyLogout ? "Signing out…" : "Sign out"}
             </button>
@@ -140,15 +164,21 @@ function OnboardModal({
   const [actorType, setActorType] = useState<ActorType | "">(allowed[0] ?? "");
   const [name, setName] = useState("");
   const [legalRef, setLegalRef] = useState("");
-  const [meta, setMeta] = useState<Record<string, string>>({});
+  const [meta, setMeta] = useState<Record<string, string>>({ region: "Sidama" });
+  const [facilityType, setFacilityType] = useState<"washing_station" | "mill">("washing_station");
+  const [facilityName, setFacilityName] = useState("");
+  const [facilityKebele, setFacilityKebele] = useState("");
+  const [facilityCapacity, setFacilityCapacity] = useState("");
+  const [facilityOperator, setFacilityOperator] = useState("");
 
   const fields = actorType ? METADATA_FIELDS[actorType] ?? [] : [];
+  const isAddAkrabi = actorType === "akrabi";
 
   function submit(e: FormEvent) {
     e.preventDefault();
     if (!actorType) return;
     if (!name.trim() || !legalRef.trim()) {
-      toast("Name and identity reference are both required.", true);
+      toast("Name and registration reference are both required.", true);
       return;
     }
     try {
@@ -157,10 +187,30 @@ function OnboardModal({
         if (val.trim()) metadata[key] = val.trim();
       }
       const a = ledger.onboardActor(actorType, name.trim(), legalRef.trim(), actingActorId, metadata);
+
+      if (isAddAkrabi && facilityName.trim()) {
+        ledger.onboardActor(
+          facilityType,
+          facilityName.trim(),
+          `${legalRef.trim()}-SITE`,
+          a.actorId,
+          {
+            region: metadata.region || "",
+            zone: metadata.zone || "",
+            woreda: metadata.woreda || "",
+            kebele: facilityKebele.trim(),
+            capacityKgPerDay: facilityCapacity.trim(),
+            operator: facilityOperator.trim(),
+          },
+        );
+      }
+
       refresh();
       onClose();
       toast(
-        `${a.displayName} added — permanently onboarded by ${actor?.displayName ?? actingActorId}.`,
+        isAddAkrabi
+          ? `${a.displayName} added to your network.`
+          : `${a.displayName} added — permanently onboarded by ${actor?.displayName ?? actingActorId}.`,
       );
     } catch (err) {
       const msg =
@@ -193,48 +243,68 @@ function OnboardModal({
         ) : (
           <form onSubmit={submit}>
             <h3>
-              {allowed.length === 1
-                ? `Add a ${ACTOR_TYPE_LABELS[allowed[0]].toLowerCase()}`
-                : "Add to your network"}
+              {isAddAkrabi
+                ? "Add a new akrabi"
+                : allowed.length === 1
+                  ? `Add a ${ACTOR_TYPE_LABELS[allowed[0]].toLowerCase()}`
+                  : "Add to your network"}
             </h3>
             <p className="helper-note">
-              Onboarded by you ({actor?.displayName}) — this relationship is permanent.
+              {isAddAkrabi
+                ? "This brings the akrabi and their processing site into your network in one step. You'll add their farmers separately."
+                : `Onboarded by you (${actor?.displayName}) — this relationship is permanent.`}
             </p>
+            {allowed.length > 1 && (
+              <div className="field">
+                <label htmlFor="oa-type">Type</label>
+                <select
+                  id="oa-type"
+                  value={actorType}
+                  onChange={(e) => {
+                    setActorType(e.target.value as ActorType);
+                    setMeta({ region: "Sidama" });
+                  }}
+                >
+                  {allowed.map((t) => (
+                    <option key={t} value={t}>
+                      {ACTOR_TYPE_LABELS[t]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {isAddAkrabi && <h3 className="subhead">Akrabi</h3>}
             <div className="field">
-              <label htmlFor="oa-type">Type</label>
-              <select
-                id="oa-type"
-                value={actorType}
-                onChange={(e) => {
-                  setActorType(e.target.value as ActorType);
-                  setMeta({});
-                }}
-              >
-                {allowed.map((t) => (
-                  <option key={t} value={t}>
-                    {ACTOR_TYPE_LABELS[t]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="oa-name">Display name</label>
+              <label htmlFor="oa-name">Name</label>
               <input
                 id="oa-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                placeholder={isAddAkrabi ? "e.g. Tolera Guyo" : undefined}
                 required
               />
             </div>
             <div className="field">
-              <label htmlFor="oa-id">Legal identity reference</label>
+              <label htmlFor="oa-id">
+                {isAddAkrabi
+                  ? "Registration reference"
+                  : actorType === "farmer"
+                    ? "Fayda / registration reference"
+                    : "Legal identity reference"}
+              </label>
               <input
                 id="oa-id"
                 type="text"
                 value={legalRef}
                 onChange={(e) => setLegalRef(e.target.value)}
-                placeholder="Registration / FAYDA / license"
+                placeholder={
+                  isAddAkrabi
+                    ? "e.g. REG-AK-1010"
+                    : actorType === "farmer"
+                      ? "e.g. FAYDA-002001"
+                      : "Registration / FAYDA / license"
+                }
                 required
               />
             </div>
@@ -250,8 +320,70 @@ function OnboardModal({
                 />
               </div>
             ))}
+
+            {isAddAkrabi && (
+              <>
+                <h3 className="subhead" style={{ marginTop: 18 }}>
+                  Their processing site
+                </h3>
+                <div className="field">
+                  <label htmlFor="aa-facility-type">Type</label>
+                  <select
+                    id="aa-facility-type"
+                    value={facilityType}
+                    onChange={(e) =>
+                      setFacilityType(e.target.value as "washing_station" | "mill")
+                    }
+                  >
+                    <option value="washing_station">Washing station</option>
+                    <option value="mill">Mill</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="aa-facility-name">Site name</label>
+                  <input
+                    id="aa-facility-name"
+                    type="text"
+                    value={facilityName}
+                    onChange={(e) => setFacilityName(e.target.value)}
+                    placeholder="e.g. Yirgacheffe Washing Station"
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="aa-facility-kebele">Kebele</label>
+                  <input
+                    id="aa-facility-kebele"
+                    type="text"
+                    value={facilityKebele}
+                    onChange={(e) => setFacilityKebele(e.target.value)}
+                    placeholder="e.g. Gersay"
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="aa-facility-capacity">Capacity (kg/day)</label>
+                  <input
+                    id="aa-facility-capacity"
+                    type="text"
+                    value={facilityCapacity}
+                    onChange={(e) => setFacilityCapacity(e.target.value)}
+                    placeholder="e.g. 3000"
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="aa-facility-operator">Operator</label>
+                  <input
+                    id="aa-facility-operator"
+                    type="text"
+                    value={facilityOperator}
+                    onChange={(e) => setFacilityOperator(e.target.value)}
+                    placeholder="e.g. site manager's name"
+                  />
+                </div>
+              </>
+            )}
+
             <div className="btn-row">
-              <button type="submit">Onboard</button>
+              <button type="submit">{isAddAkrabi ? "Add akrabi" : "Add"}</button>
               <button type="button" className="secondary" onClick={onClose}>
                 Cancel
               </button>

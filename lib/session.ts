@@ -6,6 +6,8 @@ export const ADMIN_COOKIE = "ank_admin";
 export type SessionPayload = {
   sub: string;
   email: string;
+  name?: string;
+  companyName?: string;
 };
 
 function secretKey() {
@@ -18,7 +20,11 @@ export async function createSessionToken(
   payload: SessionPayload,
   hours = Number(process.env.SESSION_HOURS || 6),
 ): Promise<string> {
-  return new SignJWT({ email: payload.email })
+  return new SignJWT({
+    email: payload.email,
+    name: payload.name || "",
+    companyName: payload.companyName || "",
+  })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(payload.sub)
     .setIssuedAt()
@@ -30,7 +36,12 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   try {
     const { payload } = await jwtVerify(token, secretKey());
     if (!payload.sub || typeof payload.email !== "string") return null;
-    return { sub: payload.sub, email: payload.email };
+    return {
+      sub: payload.sub,
+      email: payload.email,
+      name: typeof payload.name === "string" ? payload.name : undefined,
+      companyName: typeof payload.companyName === "string" ? payload.companyName : undefined,
+    };
   } catch {
     return null;
   }

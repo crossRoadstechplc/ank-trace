@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ACTOR_TYPE_LABELS,
   REASON_LABELS,
@@ -159,7 +159,7 @@ function LotsTab({
             <th>State</th>
             <th>Route</th>
             <th>Status</th>
-            <th>Mass (kg)</th>
+            <th>Weight (kg)</th>
             <th>Owner</th>
             <th>Custodian</th>
             <th>Origin</th>
@@ -297,27 +297,43 @@ function IntegrityTab({
   lotCode: (id: string) => string;
   version: number;
 }) {
-  const checks = useMemo(() => runIntegrityChecks(ledger, lotCode), [ledger, lotCode, version]);
+  const [checks, setChecks] = useState<{ status: string; title: string; text: string }[] | null>(
+    null,
+  );
   const iconFor = (s: string) => (s === "good" ? "✓" : s === "attention" ? "!" : "✕");
+
+  // Clear results when ledger changes so user re-runs Check now
+  useEffect(() => {
+    setChecks(null);
+  }, [version]);
 
   return (
     <div className="tabpanel active">
       <div className="page-head">
         <h2 className="section-title">Integrity checks</h2>
         <p className="helper-note">
-          A reasonable subset of ledger health: traceability to farmer origin, mass conservation,
-          and open shipment discrepancies.
+          A live check of the ledger as it stands right now — traceability to farmer origin, weight
+          conservation across processing, and open shipment discrepancies.
         </p>
+        <button
+          type="button"
+          className="secondary"
+          style={{ marginTop: 10 }}
+          onClick={() => setChecks(runIntegrityChecks(ledger, lotCode))}
+        >
+          Check now
+        </button>
       </div>
-      {checks.map((c) => (
-        <div key={c.title} className={`chk-item chk-${c.status}`}>
-          <div className="chk-icon">{iconFor(c.status)}</div>
-          <div>
-            <div className="chk-title">{c.title}</div>
-            <div className="chk-text">{c.text}</div>
+      {checks &&
+        checks.map((c) => (
+          <div key={c.title} className={`chk-item chk-${c.status}`}>
+            <div className="chk-icon">{iconFor(c.status)}</div>
+            <div>
+              <div className="chk-title">{c.title}</div>
+              <div className="chk-text">{c.text}</div>
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
     </div>
   );
 }
@@ -369,11 +385,11 @@ function runIntegrityChecks(ledger: Ledger, lotCode: (id: string) => string) {
     const diff = Math.round((totalMinted - totalAccounted) * 100) / 100;
     checks.push({
       status: Math.abs(diff) < 0.01 ? "good" : "problem",
-      title: "Mass balance",
+      title: "Weight balance",
       text:
         totalMinted === 0
           ? "No coffee has entered the ledger yet."
-          : `${fmtKg(totalMinted)}kg has entered the ledger from harvest. ${fmtKg(totalActiveNow)}kg is currently held across active lots, ${fmtKg(totalClosed)}kg has been closed out (exported, sold, or destroyed), and ${fmtKg(totalRejectLoss)}kg was recorded as reject or process loss.` +
+          : `${fmtKg(totalMinted)}kg has entered the ledger from harvest. ${fmtKg(totalActiveNow)}kg is currently held across active lots, ${fmtKg(totalClosed)}kg has been closed out (exported, sold, or destroyed), and ${fmtKg(totalRejectLoss)}kg was recorded as reject or weight loss.` +
             (Math.abs(diff) < 0.01
               ? " Every kilogram is accounted for."
               : ` ${fmtKg(Math.abs(diff))}kg is unaccounted for — this should never happen and needs investigation.`),

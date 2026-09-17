@@ -6,28 +6,42 @@ import {
   hashOtp,
   jsonError,
   normalizeEmail,
+  normalizePhone,
   safeEqual,
   setSessionCookie,
 } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
-const bodySchema = z.object({
-  email: z.string().email(),
-  code: z.string().min(4).max(12),
-});
-
 export async function POST(req: NextRequest) {
   try {
-    const parsed = bodySchema.safeParse(await req.json());
-    if (!parsed.success) return jsonError("Invalid email or code.");
+    const body = await req.json();
+    const codeParsed = z.object({ code: z.string().min(4).max(12) }).safeParse(body);
+    if (!codeParsed.success) return jsonError("Invalid code.");
 
-    const email = normalizeEmail(parsed.data.email);
-    const code = parsed.data.code.trim();
+    const code = codeParsed.data.code.trim();
     const now = new Date();
+    const channel = env.otpChannel;
+
+    let identifier: string;
+    let contactForSession: string;
+
+    if (channel === "email") {
+      const parsed = z.object({ email: z.string().email() }).safeParse(body);
+      if (!parsed.success) return jsonError("Invalid email or code.");
+      identifier = normalizeEmail(parsed.data.email);
+      contactForSession = identifier;
+    } else {
+      const parsed = z.object({ phone: z.string().min(9).max(20) }).safeParse(body);
+      if (!parsed.success) return jsonError("Invalid phone or code.");
+      const phone = normalizePhone(parsed.data.phone);
+      if (!phone) return jsonError("Invalid phone or code.");
+      identifier = phone;
+      contactForSession = phone;
+    }
 
     const challenge = await prisma.otpChallenge.findFirst({
-      where: { email, consumedAt: null },
+      where: { identifier, consumedAt: null },
       orderBy: { createdAt: "desc" },
     });
 
@@ -48,11 +62,18 @@ export async function POST(req: NextRequest) {
       return jsonError("Incorrect code.");
     }
 
-    const user = await prisma.user.upsert({
-      where: { email },
-      create: { email, loginCount: 1, lastLoginAt: now },
-      update: { loginCount: { increment: 1 }, lastLoginAt: now },
-    });
+    const user =
+      channel === "email"
+        ? await prisma.user.upsert({
+            where: { email: identifier },
+            create: { email: identifier, loginCount: 1, lastLoginAt: now },
+            update: { loginCount: { increment: 1 }, lastLoginAt: now },
+          })
+        : await prisma.user.upsert({
+            where: { phone: identifier },
+            create: { phone: identifier, loginCount: 1, lastLoginAt: now },
+            update: { loginCount: { increment: 1 }, lastLoginAt: now },
+          });
 
     await prisma.otpChallenge.update({
       where: { id: challenge.id },
@@ -64,7 +85,12 @@ export async function POST(req: NextRequest) {
       data: { userId: user.id, ip, userAgent },
     });
 
-    const token = await createSessionToken({ sub: user.id, email: user.email });
+    const token = await createSessionToken({
+      sub: user.id,
+      email: contactForSession,
+      name: user.name ?? undefined,
+      companyName: user.companyName ?? undefined,
+    });
     await setSessionCookie(token);
 
     return NextResponse.json({ ok: true });

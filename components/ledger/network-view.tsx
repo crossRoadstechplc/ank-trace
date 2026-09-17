@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import {
   ACTOR_TYPE_LABELS,
   METADATA_FIELDS,
+  actorDeliveriesTo,
   actorTypeLabel,
   fmtKg,
   formatEventTime,
@@ -69,10 +70,12 @@ export function NetworkView() {
 
   return (
     <div className="view active">
-      <h2 className="section-title">
-        {root ? `${root.displayName}'s network` : "Network"}
-      </h2>
-      <p className="helper-note">{helper}</p>
+      <div className="page-head">
+        <h2 className="section-title">
+          {root ? `${root.displayName}'s network` : "Network"}
+        </h2>
+        <p className="helper-note">{helper}</p>
+      </div>
 
       {sessionRole === "farmer" ? (
         root ? (
@@ -292,7 +295,7 @@ function ActorProfileModal({
             ))}
           </div>
         )}
-        {actingActorId !== actorId && sessionRole !== "exporter" && (
+        {actingActorId !== actorId && (
           <DeliveryHistory actorId={actorId} lotCode={lotCode} />
         )}
         {sessionRole === "exporter" && actor.actorType === "akrabi" && (
@@ -337,21 +340,7 @@ function DeliveryHistory({
   lotCode: (id: string) => string;
 }) {
   const { ledger, actingActorId } = useLedger();
-  const rows: { lotId: string; kg: number; time: string }[] = [];
-
-  for (const ev of ledger.events) {
-    if (ev.eventType !== "movement_receive") continue;
-    if (ev.onBehalfOfActorId !== actingActorId) continue;
-    const mid = ev.payload.movementId as string | undefined;
-    if (!mid) continue;
-    const mv = ledger.movements.get(mid);
-    if (!mv || mv.fromActorId !== actorId) continue;
-    rows.push({
-      lotId: mv.lotId,
-      kg: mv.receiverDeclaredKg ?? mv.senderDeclaredKg,
-      time: ev.eventTime,
-    });
-  }
+  const rows = actorDeliveriesTo(ledger, actorId, actingActorId);
 
   if (rows.length === 0) return null;
 
@@ -365,25 +354,22 @@ function DeliveryHistory({
           <thead>
             <tr>
               <th>Lot</th>
-              <th>State</th>
+              <th>Form</th>
+              <th>Weight</th>
               <th>Received</th>
-              <th>When</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, i) => {
-              const lot = ledger.lots.get(r.lotId);
-              return (
-                <tr key={`${r.lotId}-${i}`}>
-                  <td>{lotCode(r.lotId)}</td>
-                  <td>{lot ? stateLabel(lot.processingState) : "—"}</td>
-                  <td>
-                    <b>{fmtKg(r.kg)} kg</b>
-                  </td>
-                  <td className="mono-small">{formatEventTime(r.time)}</td>
-                </tr>
-              );
-            })}
+            {rows.map((r, i) => (
+              <tr key={`${r.lot.lotId}-${i}`}>
+                <td>{lotCode(r.lot.lotId)}</td>
+                <td>{stateLabel(r.lot.processingState)}</td>
+                <td>
+                  <b>{fmtKg(r.receivedKg)} kg</b>
+                </td>
+                <td className="mono-small">{formatEventTime(r.time)}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>

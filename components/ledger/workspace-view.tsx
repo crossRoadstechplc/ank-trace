@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   InvariantViolation,
   LOSS_ELIGIBLE_STATES,
@@ -8,6 +8,7 @@ import {
   actorLabel,
   allowedSendTargets,
   displayActorName,
+  fmtKg,
   primaryWorkspaceAction,
   routeLabel,
   stateLabel,
@@ -17,6 +18,7 @@ import {
   type TerminalReason,
 } from "@/lib/ledger";
 import { useLedger } from "./ledger-context";
+import type { SessionRole } from "@/lib/role-session";
 
 type Action =
   | null
@@ -27,7 +29,8 @@ type Action =
   | "transfer"
   | "close"
   | "newLot"
-  | "confirmReceipt";
+  | "confirmReceipt"
+  | "addAkrabi";
 
 function catchInv(err: unknown, toast: (m: string, e?: boolean) => void) {
   const msg =
@@ -37,6 +40,10 @@ function catchInv(err: unknown, toast: (m: string, e?: boolean) => void) {
         ? err.message
         : "Something went wrong.";
   toast(msg, true);
+}
+
+function scrollDetailIntoView(el: HTMLElement | null) {
+  el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 export function WorkspaceView() {
@@ -54,6 +61,7 @@ export function WorkspaceView() {
 
   const [action, setAction] = useState<Action>(null);
   const [movementId, setMovementId] = useState<string | null>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
 
   // Reset ephemeral action when actor changes
   useEffect(() => {
@@ -81,18 +89,28 @@ export function WorkspaceView() {
     setSelectedLotId(id);
     setAction(null);
     setMovementId(null);
+    requestAnimationFrame(() => scrollDetailIntoView(detailRef.current));
   }
 
   function openNewLot() {
     setSelectedLotId(null);
     setMovementId(null);
     setAction("newLot");
+    requestAnimationFrame(() => scrollDetailIntoView(detailRef.current));
+  }
+
+  function openAddAkrabi() {
+    setSelectedLotId(null);
+    setMovementId(null);
+    setAction("addAkrabi");
+    requestAnimationFrame(() => scrollDetailIntoView(detailRef.current));
   }
 
   function openConfirm(mid: string) {
     setSelectedLotId(null);
     setMovementId(mid);
     setAction("confirmReceipt");
+    requestAnimationFrame(() => scrollDetailIntoView(detailRef.current));
   }
 
   function cancelAction() {
@@ -126,9 +144,9 @@ export function WorkspaceView() {
           </p>
         )}
         {primary === "addAkrabi" && (
-          <p className="helper-note" style={{ margin: 0 }}>
-            Use <b>+ Add new akrabi</b> in the toolbar to grow your sponsored aggregators.
-          </p>
+          <button type="button" onClick={openAddAkrabi}>
+            + Add new akrabi
+          </button>
         )}
       </div>
 
@@ -196,7 +214,7 @@ export function WorkspaceView() {
                 <span className="llr-owner">
                   {displayActorName(ledger, l.ownerActorId, sessionRole)}
                 </span>
-                <span className="llr-weight">{l.canonicalMassKg} kg</span>
+                <span className="llr-weight">{fmtKg(l.canonicalMassKg)} kg</span>
                 <span className={`badge ${l.inTransit ? "transit" : "active"}`}>
                   {l.inTransit ? "in transit" : "active"}
                 </span>
@@ -206,7 +224,7 @@ export function WorkspaceView() {
         )}
       </div>
 
-      <div>
+      <div ref={detailRef} id="detailPanelWrap">
         {action === "newLot" && (
           <NewLotForm
             onCancel={cancelAction}
@@ -217,6 +235,15 @@ export function WorkspaceView() {
             toast={toast}
             setSelectedLotId={setSelectedLotId}
             setAction={setAction}
+          />
+        )}
+        {action === "addAkrabi" && (
+          <AddAkrabiForm
+            onCancel={cancelAction}
+            actingActorId={actingActorId}
+            ledger={ledger}
+            refresh={refresh}
+            toast={toast}
           />
         )}
         {action === "confirmReceipt" && movementId && (
@@ -236,6 +263,7 @@ export function WorkspaceView() {
             lot={selected}
             lotCode={lotCode}
             ledger={ledger}
+            sessionRole={sessionRole}
             onBack={deselectLot}
             onAction={(a) => setAction(a)}
           />
@@ -243,7 +271,8 @@ export function WorkspaceView() {
         {action &&
           selected &&
           action !== "newLot" &&
-          action !== "confirmReceipt" && (
+          action !== "confirmReceipt" &&
+          action !== "addAkrabi" && (
             <ActionForm
               action={action}
               lot={selected}
@@ -269,12 +298,14 @@ function LotDetail({
   lot,
   lotCode,
   ledger,
+  sessionRole,
   onBack,
   onAction,
 }: {
   lot: Lot;
   lotCode: (id: string) => string;
   ledger: ReturnType<typeof useLedger>["ledger"];
+  sessionRole: SessionRole;
   onBack: () => void;
   onAction: (a: Action) => void;
 }) {
@@ -291,8 +322,8 @@ function LotDetail({
       </div>
       <div className="detail-facts">
         <div>
-          <div className="fact-label">Mass</div>
-          <div className="fact-value">{lot.canonicalMassKg}kg</div>
+          <div className="fact-label">Weight</div>
+          <div className="fact-value">{fmtKg(lot.canonicalMassKg)}kg</div>
         </div>
         <div>
           <div className="fact-label">Route</div>
@@ -304,11 +335,15 @@ function LotDetail({
         </div>
         <div>
           <div className="fact-label">Owner</div>
-          <div className="fact-value">{actorLabel(ledger, lot.ownerActorId)}</div>
+          <div className="fact-value">
+            {displayActorName(ledger, lot.ownerActorId, sessionRole)}
+          </div>
         </div>
         <div>
           <div className="fact-label">Custodian</div>
-          <div className="fact-value">{actorLabel(ledger, lot.custodianActorId)}</div>
+          <div className="fact-value">
+            {displayActorName(ledger, lot.custodianActorId, sessionRole)}
+          </div>
         </div>
         <div>
           <div className="fact-label">Origin basis</div>
@@ -343,6 +378,194 @@ function LotDetail({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function AddAkrabiForm({
+  onCancel,
+  actingActorId,
+  ledger,
+  refresh,
+  toast,
+}: {
+  onCancel: () => void;
+  actingActorId: string;
+  ledger: ReturnType<typeof useLedger>["ledger"];
+  refresh: () => void;
+  toast: (m: string, e?: boolean) => void;
+}) {
+  const [name, setName] = useState("");
+  const [ref, setRef] = useState("");
+  const [region, setRegion] = useState("Sidama");
+  const [zone, setZone] = useState("");
+  const [woreda, setWoreda] = useState("");
+  const [years, setYears] = useState("");
+  const [facilityType, setFacilityType] = useState<"washing_station" | "mill">("washing_station");
+  const [facilityName, setFacilityName] = useState("");
+  const [facilityKebele, setFacilityKebele] = useState("");
+  const [facilityCapacity, setFacilityCapacity] = useState("");
+  const [facilityOperator, setFacilityOperator] = useState("");
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    try {
+      if (!name.trim() || !ref.trim()) {
+        throw new Error("Name and registration reference are both required.");
+      }
+      const akrabi = ledger.onboardActor("akrabi", name.trim(), ref.trim(), actingActorId, {
+        region: region.trim(),
+        zone: zone.trim(),
+        woreda: woreda.trim(),
+        yearsOperating: years.trim(),
+      });
+      if (facilityName.trim()) {
+        ledger.onboardActor(facilityType, facilityName.trim(), `${ref.trim()}-SITE`, akrabi.actorId, {
+          region: region.trim(),
+          zone: zone.trim(),
+          woreda: woreda.trim(),
+          kebele: facilityKebele.trim(),
+          capacityKgPerDay: facilityCapacity.trim(),
+          operator: facilityOperator.trim(),
+        });
+      }
+      onCancel();
+      toast(`${akrabi.displayName} added to your network.`);
+    } catch (err) {
+      catchInv(err, toast);
+    }
+  }
+
+  return (
+    <div className="detail-panel">
+      <span className="back-link" onClick={onCancel} role="button" tabIndex={0}>
+        ← cancel
+      </span>
+      <h3 style={{ fontFamily: "var(--font)", fontSize: 20, margin: "0 0 16px" }}>
+        Add a new akrabi
+      </h3>
+      <p className="helper-note">
+        This brings the akrabi and their processing site into your network in one step. You&apos;ll
+        add their farmers separately, from the akrabi&apos;s own profile.
+      </p>
+      <form onSubmit={submit}>
+        <h3 className="subhead">Akrabi</h3>
+        <div className="field">
+          <label htmlFor="aa-name">Name</label>
+          <input
+            id="aa-name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Tolera Guyo"
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="aa-id">Registration reference</label>
+          <input
+            id="aa-id"
+            type="text"
+            value={ref}
+            onChange={(e) => setRef(e.target.value)}
+            placeholder="e.g. REG-AK-1010"
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="aa-region">Region</label>
+          <input
+            id="aa-region"
+            type="text"
+            value={region}
+            onChange={(e) => setRegion(e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="aa-zone">Zone</label>
+          <input
+            id="aa-zone"
+            type="text"
+            value={zone}
+            onChange={(e) => setZone(e.target.value)}
+            placeholder="e.g. Gedeo"
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="aa-woreda">Woreda</label>
+          <input
+            id="aa-woreda"
+            type="text"
+            value={woreda}
+            onChange={(e) => setWoreda(e.target.value)}
+            placeholder="e.g. Yirgacheffe"
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="aa-years">Years operating</label>
+          <input
+            id="aa-years"
+            type="text"
+            value={years}
+            onChange={(e) => setYears(e.target.value)}
+            placeholder="e.g. 6"
+          />
+        </div>
+
+        <h3 className="subhead" style={{ marginTop: 18 }}>
+          Their processing site
+        </h3>
+        <div className="field">
+          <label htmlFor="aa-facility-type">Type</label>
+          <select
+            id="aa-facility-type"
+            value={facilityType}
+            onChange={(e) => setFacilityType(e.target.value as "washing_station" | "mill")}
+          >
+            <option value="washing_station">Washing station</option>
+            <option value="mill">Mill</option>
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="aa-facility-name">Site name</label>
+          <input
+            id="aa-facility-name"
+            type="text"
+            value={facilityName}
+            onChange={(e) => setFacilityName(e.target.value)}
+            placeholder="e.g. Yirgacheffe Washing Station"
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="aa-facility-kebele">Kebele</label>
+          <input
+            id="aa-facility-kebele"
+            type="text"
+            value={facilityKebele}
+            onChange={(e) => setFacilityKebele(e.target.value)}
+            placeholder="e.g. Gersay"
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="aa-facility-capacity">Capacity (kg/day)</label>
+          <input
+            id="aa-facility-capacity"
+            type="text"
+            value={facilityCapacity}
+            onChange={(e) => setFacilityCapacity(e.target.value)}
+            placeholder="e.g. 3000"
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="aa-facility-operator">Operator</label>
+          <input
+            id="aa-facility-operator"
+            type="text"
+            value={facilityOperator}
+            onChange={(e) => setFacilityOperator(e.target.value)}
+            placeholder="e.g. site manager's name"
+          />
+        </div>
+        <button type="submit">Add akrabi</button>
+      </form>
     </div>
   );
 }
@@ -727,7 +950,7 @@ function SendForm({
           </select>
         </div>
         <div className="field">
-          <label htmlFor="ms-mass">Mass you&apos;re declaring (kg)</label>
+          <label htmlFor="ms-mass">Weight you&apos;re declaring (kg)</label>
           <input
             id="ms-mass"
             type="number"
@@ -741,13 +964,13 @@ function SendForm({
           <input
             id="ms-loc"
             type="text"
-            placeholder="e.g. Akrabi store, Jimma"
+            placeholder="e.g. Yirgacheffe Washing Station"
             value={loc}
             onChange={(e) => setLoc(e.target.value)}
           />
         </div>
         <p className="helper-note">
-          The receiver will confirm the mass on arrival. If it doesn&apos;t match, that&apos;s logged
+          The receiver will confirm the weight on arrival. If it doesn&apos;t match, that&apos;s logged
           as a discrepancy — not a problem you need to fix here.
         </p>
         <button type="submit">Send</button>
@@ -1083,7 +1306,7 @@ function ProcessForm({
           />
         </div>
         <div className="field">
-          <label htmlFor="pr-loss">Genuine moisture/process loss (kg)</label>
+          <label htmlFor="pr-loss">Weight loss (kg)</label>
           <input
             id="pr-loss"
             type="number"

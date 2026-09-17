@@ -10,7 +10,10 @@ datasource db {
 
 model User {
   id            String         @id @default(cuid())
-  email         String         @unique
+  email         String?        @unique
+  phone         String?        @unique
+  name          String?
+  companyName   String?
   createdAt     DateTime       @default(now())
   lastLoginAt   DateTime?
   loginCount    Int            @default(0)
@@ -20,7 +23,7 @@ model User {
 
 model OtpChallenge {
   id         String    @id @default(cuid())
-  email      String
+  identifier String
   codeHash   String
   expiresAt  DateTime
   attempts   Int       @default(0)
@@ -29,7 +32,7 @@ model OtpChallenge {
   user       User?     @relation(fields: [userId], references: [id])
   userId     String?
 
-  @@index([email, createdAt])
+  @@index([identifier, createdAt])
 }
 
 model LoginEvent {

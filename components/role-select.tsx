@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { actorsOfType, getClientLedger } from "@/lib/ledger";
 import {
   SESSION_ROLE_LABELS,
+  clearRoleSession,
   setRoleSession,
   type SessionRole,
 } from "@/lib/role-session";
@@ -32,6 +33,7 @@ export function RoleSelect() {
   const boot = useMemo(() => getClientLedger(), []);
   const [step, setStep] = useState<Step>("role");
   const [role, setRole] = useState<SessionRole | null>(null);
+  const [busyLogout, setBusyLogout] = useState(false);
 
   const candidates = useMemo(() => {
     if (!role || role === "exporter") return [];
@@ -59,13 +61,33 @@ export function RoleSelect() {
     window.location.href = "/workspace";
   }
 
+  async function signOut() {
+    setBusyLogout(true);
+    try {
+      clearRoleSession();
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      window.location.href = "/";
+    }
+  }
+
   return (
     <div className="login-shell">
       <header className="masthead">
-        <div className="shell-inner masthead-inner">
+        <div className="auth-inner auth-inner-wide masthead-auth">
           <div className="brand-lockup">
             <div className="brand">Ankuaru</div>
             <div className="kicker">Choose your role</div>
+          </div>
+          <div className="role-select-actions">
+            <button
+              type="button"
+              className="secondary"
+              disabled={busyLogout}
+              onClick={() => void signOut()}
+            >
+              {busyLogout ? "Signing out…" : "Sign out"}
+            </button>
           </div>
           <div className="masthead-copy">
             <h1>How do you want to enter the ledger?</h1>

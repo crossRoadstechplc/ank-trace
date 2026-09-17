@@ -30,6 +30,17 @@ export const env = {
   get otpResendSeconds() {
     return intEnv("OTP_RESEND_SECONDS", 30);
   },
+  /** sms | email — default sms */
+  get otpChannel(): "sms" | "email" {
+    const raw = (process.env.OTP_CHANNEL || "sms").trim().toLowerCase();
+    return raw === "email" ? "email" : "sms";
+  },
+  get geezSmsToken() {
+    return process.env.GEEZSMS_TOKEN || "";
+  },
+  get geezSmsShortcodeId() {
+    return process.env.GEEZSMS_SHORTCODE_ID || "";
+  },
   get adminPassword() {
     return required("ADMIN_PASSWORD");
   },

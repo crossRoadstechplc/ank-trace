@@ -26,6 +26,17 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+/** Normalize Ethiopian mobiles to 2519XXXXXXXX (no +). */
+export function normalizePhone(raw: string): string | null {
+  const digits = raw.replace(/[^\d]/g, "");
+  let n = digits;
+  if (n.startsWith("0") && n.length === 10) n = `251${n.slice(1)}`;
+  else if (n.length === 9 && n.startsWith("9")) n = `251${n}`;
+  else if (n.startsWith("2510") && n.length === 13) n = `251${n.slice(4)}`;
+  if (!/^2519\d{8}$/.test(n)) return null;
+  return n;
+}
+
 export function hashOtp(code: string): string {
   return createHash("sha256").update(code).digest("hex");
 }

@@ -120,7 +120,7 @@ export function LineageTracePanel({
         aggregation and processing with exact weight accounting, ending at FOB.
       </p>
       <div className="field">
-        <label htmlFor="trace-lot">Lot</label>
+        <label htmlFor="trace-lot">Select a lot</label>
         <select
           id="trace-lot"
           value={traceLotId}

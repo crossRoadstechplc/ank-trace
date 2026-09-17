@@ -19,7 +19,9 @@ export async function GET() {
 
     const leads = users.map((u) => ({
       id: u.id,
-      email: u.email,
+      name: u.name,
+      companyName: u.companyName,
+      contact: u.email ?? u.phone ?? "—",
       createdAt: u.createdAt.toISOString(),
       lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
       loginCount: u.loginCount,
