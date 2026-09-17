@@ -80,11 +80,19 @@ export const METADATA_FIELDS: Partial<Record<ActorType, MetadataField[]>> = {
     ["operator", "Operator", ""],
   ],
   exporter: [
+    ["companyName", "Company", ""],
     ["address", "Address", "Addis Ababa"],
     ["exportLicense", "Export license", ""],
     ["nbeRegistration", "NBE / ECX registration", ""],
     ["contactPerson", "Contact person", ""],
     ["contactPhone", "Contact phone", ""],
+    ["warehouse", "Warehouse", ""],
+    ["yearsOperating", "Years operating", ""],
+    ["primaryDestinations", "Primary destinations", ""],
+    ["annualVolumeBags", "Annual volume (bags)", ""],
+    ["certifications", "Certifications", ""],
+    ["bank", "Bank / FX", ""],
+    ["tin", "TIN", ""],
   ],
 };
 

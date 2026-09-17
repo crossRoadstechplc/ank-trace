@@ -7,7 +7,6 @@ import {
   ACTOR_TYPE_LABELS,
   InvariantViolation,
   METADATA_FIELDS,
-  actorTypeLabel,
   canOnboardTypes,
   dashboardKicker,
   primaryWorkspaceAction,
@@ -76,8 +75,8 @@ export function AppShell({ children, userName, companyName, userContact }: AppSh
                   · <b>{companyLabel}</b>
                 </>
               ) : null}
-              . Viewing as {SESSION_ROLE_LABELS[sessionRole]} — you only see the network and lots
-              valid for this role.
+              . Viewing as {SESSION_ROLE_LABELS[sessionRole]}. Network and lots are limited to this
+              role.
             </p>
           </div>
         </div>
@@ -125,7 +124,7 @@ export function AppShell({ children, userName, companyName, userContact }: AppSh
           </nav>
           <div className="toolbar-right">
             <button type="button" className="secondary" disabled={busyLogout} onClick={signOut}>
-              {busyLogout ? "Signing out…" : "Sign out"}
+              {busyLogout ? "Signing out..." : "Sign out"}
             </button>
           </div>
         </div>
@@ -210,7 +209,7 @@ function OnboardModal({
       toast(
         isAddAkrabi
           ? `${a.displayName} added to your network.`
-          : `${a.displayName} added — permanently onboarded by ${actor?.displayName ?? actingActorId}.`,
+          : `${a.displayName} added by ${actor?.displayName ?? actingActorId}.`,
       );
     } catch (err) {
       const msg =
@@ -230,9 +229,7 @@ function OnboardModal({
           <>
             <h3>Onboarding not available</h3>
             <p className="helper-note">
-              {actor ? actor.displayName : "This actor"} (
-              {actorTypeLabel(actor?.actorType ?? "") || "this role"}) doesn&apos;t onboard new
-              actors in this system.
+              {actor ? actor.displayName : "This account"} cannot onboard new parties.
             </p>
             <div className="btn-row">
               <button type="button" className="secondary" onClick={onClose}>
@@ -251,8 +248,8 @@ function OnboardModal({
             </h3>
             <p className="helper-note">
               {isAddAkrabi
-                ? "This brings the akrabi and their processing site into your network in one step. You'll add their farmers separately."
-                : `Onboarded by you (${actor?.displayName}) — this relationship is permanent.`}
+                ? "Adds the aggregator and their processing site. Farmers are added later."
+                : `Added by ${actor?.displayName}.`}
             </p>
             {allowed.length > 1 && (
               <div className="field">
@@ -281,7 +278,7 @@ function OnboardModal({
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={isAddAkrabi ? "e.g. Tolera Guyo" : undefined}
+                placeholder={isAddAkrabi ? "Tolera Guyo" : undefined}
                 required
               />
             </div>
@@ -300,9 +297,9 @@ function OnboardModal({
                 onChange={(e) => setLegalRef(e.target.value)}
                 placeholder={
                   isAddAkrabi
-                    ? "e.g. REG-AK-1010"
+                    ? "REG-AK-1010"
                     : actorType === "farmer"
-                      ? "e.g. FAYDA-002001"
+                      ? "FAYDA-002001"
                       : "Registration / FAYDA / license"
                 }
                 required
@@ -346,7 +343,7 @@ function OnboardModal({
                     type="text"
                     value={facilityName}
                     onChange={(e) => setFacilityName(e.target.value)}
-                    placeholder="e.g. Yirgacheffe Washing Station"
+                    placeholder="Yirgacheffe Washing Station"
                   />
                 </div>
                 <div className="field">
@@ -356,7 +353,7 @@ function OnboardModal({
                     type="text"
                     value={facilityKebele}
                     onChange={(e) => setFacilityKebele(e.target.value)}
-                    placeholder="e.g. Gersay"
+                    placeholder="Gersay"
                   />
                 </div>
                 <div className="field">
@@ -366,7 +363,7 @@ function OnboardModal({
                     type="text"
                     value={facilityCapacity}
                     onChange={(e) => setFacilityCapacity(e.target.value)}
-                    placeholder="e.g. 3000"
+                    placeholder="3000"
                   />
                 </div>
                 <div className="field">
@@ -376,7 +373,7 @@ function OnboardModal({
                     type="text"
                     value={facilityOperator}
                     onChange={(e) => setFacilityOperator(e.target.value)}
-                    placeholder="e.g. site manager's name"
+                    placeholder="Operator name"
                   />
                 </div>
               </>

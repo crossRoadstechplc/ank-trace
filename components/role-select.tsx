@@ -13,17 +13,17 @@ const ROLES: { id: SessionRole; title: string; blurb: string }[] = [
   {
     id: "farmer",
     title: SESSION_ROLE_LABELS.farmer,
-    blurb: "See only your own farm, lots in your custody, and send cherry to your aggregator.",
+    blurb: "Your farm, lots in your custody, and cherry sent to your aggregator.",
   },
   {
     id: "akrabi",
     title: SESSION_ROLE_LABELS.akrabi,
-    blurb: "See only farmers you sponsored. Receive, process, and send toward the exporter.",
+    blurb: "Farmers you sponsored. Receive, process, and send toward the exporter.",
   },
   {
     id: "exporter",
     title: SESSION_ROLE_LABELS.exporter,
-    blurb: "See only aggregators you sponsored — not their farmers. Receive green and close at FOB.",
+    blurb: "Aggregators you sponsored. Receive green and close at FOB. Farmer names stay hidden.",
   },
 ];
 
@@ -77,7 +77,6 @@ export function RoleSelect() {
         <div className="auth-inner auth-inner-wide masthead-auth">
           <div className="brand-lockup">
             <div className="brand">Ankuaru</div>
-            <div className="kicker">Choose your role</div>
           </div>
           <div className="role-select-actions">
             <button
@@ -86,14 +85,14 @@ export function RoleSelect() {
               disabled={busyLogout}
               onClick={() => void signOut()}
             >
-              {busyLogout ? "Signing out…" : "Sign out"}
+              {busyLogout ? "Signing out..." : "Sign out"}
             </button>
           </div>
           <div className="masthead-copy">
-            <h1>How do you want to enter the ledger?</h1>
+            <h1>Select a role</h1>
             <p>
-              This choice is for this browser session only. Three seeded demo identities are
-              available for Farmer and Aggregator.
+              Farmer and Aggregator each have three demo identities. Exporter uses
+              your signed-in name on the rich seed profile.
             </p>
           </div>
         </div>
@@ -119,11 +118,9 @@ export function RoleSelect() {
             <h2 className="section-title">
               Select {role ? SESSION_ROLE_LABELS[role] : "actor"}
             </h2>
-            <p className="helper-note">
-              Pick who you are acting as in the seeded demo network.
-            </p>
+            <p className="helper-note">Choose an identity to work as.</p>
             {candidates.length === 0 ? (
-              <div className="empty-state">No seeded actors for this role.</div>
+              <div className="empty-state">No identities for this role.</div>
             ) : (
               <div className="role-actor-list">
                 {candidates.map((a) => (

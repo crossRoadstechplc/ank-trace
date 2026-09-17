@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       if (!parsed.success) return jsonError("Enter a valid Ethiopian mobile number.");
       const phone = normalizePhone(parsed.data.phone);
       if (!phone) {
-        return jsonError("Enter a valid Ethiopian mobile (e.g. 09xxxxxxxx or 2519xxxxxxxx).");
+        return jsonError("Enter a valid Ethiopian mobile (09xxxxxxxx or 2519xxxxxxxx).");
       }
       identifier = phone;
 

@@ -82,13 +82,10 @@ export function LoginForm() {
         <div className="auth-inner masthead-auth">
           <div className="brand-lockup">
             <div className="brand">Ankuaru</div>
-            <div className="kicker">Ledger Workspace</div>
           </div>
           <div className="masthead-copy">
-            <h1>Sign in to continue</h1>
-            <p>
-              Tell us who you are, then we&apos;ll send a one-time code. Sessions last 6 hours.
-            </p>
+            <h1>Sign in</h1>
+            <p>We&apos;ll send a one-time code. Sessions last 6 hours.</p>
           </div>
         </div>
       </header>
@@ -153,7 +150,7 @@ export function LoginForm() {
             {error && <p className="warn-note">{error}</p>}
             {message && <p className="helper-note">{message}</p>}
             <button type="submit" disabled={busy}>
-              {busy ? "Sending…" : "Send login code"}
+              {busy ? "Sending..." : "Send login code"}
             </button>
           </form>
         ) : (
@@ -191,7 +188,7 @@ export function LoginForm() {
             {message && <p className="helper-note">{message}</p>}
             <div className="btn-row">
               <button type="submit" disabled={busy}>
-                {busy ? "Verifying…" : "Sign in"}
+                {busy ? "Verifying..." : "Sign in"}
               </button>
               <button
                 type="button"

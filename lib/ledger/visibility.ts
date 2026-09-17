@@ -8,7 +8,7 @@ export function actorsOfType(ledger: Ledger, type: ActorType): Actor[] {
     .filter((a) => a.actorType === type)
     .filter((a) => {
       // Role pick / demo lists: only seeded "good" actors with demoSelectable
-      if (type === "farmer" || type === "akrabi") {
+      if (type === "farmer" || type === "akrabi" || type === "exporter") {
         return a.metadata?.demoSelectable === "true";
       }
       return true;

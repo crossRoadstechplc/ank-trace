@@ -140,7 +140,7 @@ export function WorkspaceView() {
         )}
         {primary === "addFarmer" && (
           <p className="helper-note" style={{ margin: 0 }}>
-            Use <b>+ Add new farmer</b> in the toolbar to grow your sponsored network.
+            Use <b>+ Add new farmer</b> in the toolbar to add farmers.
           </p>
         )}
         {primary === "addAkrabi" && (
@@ -153,7 +153,7 @@ export function WorkspaceView() {
       <div className="incoming-block">
         {incoming.length > 0 && (
           <>
-            <h3 className="subhead">Incoming — needs your confirmation</h3>
+            <h3 className="subhead">Incoming shipments</h3>
             {incoming.map((m) => {
               const lot = ledger.lots.get(m.lotId);
               return (
@@ -186,7 +186,7 @@ export function WorkspaceView() {
 
       <div className="lot-list">
         {held.length === 0 ? (
-          <div className="empty-state">No active lots in this actor&apos;s custody right now.</div>
+          <div className="empty-state">No active lots in custody right now.</div>
         ) : (
           <>
             <div className="lot-list-header">
@@ -316,7 +316,7 @@ function LotDetail({
       </span>
       <div className="detail-header">
         <h3>
-          {lotCode(lot.lotId)} — {stateLabel(lot.processingState)}
+          {lotCode(lot.lotId)} · {stateLabel(lot.processingState)}
         </h3>
         <span className="lotcode">{lot.lotId}</span>
       </div>
@@ -363,12 +363,12 @@ function LotDetail({
         <div className="action-grid">
           {(
             [
-              ["send", "Send to someone else", "Hand this lot to another actor"],
-              ["split", "Split this lot", "Divide it into two or more lots"],
-              ["combine", "Combine with another lot", "Merge with compatible lots you hold"],
-              ["process", "Process it", "Record a transformation, e.g. drying or milling"],
-              ["transfer", "Transfer ownership", "Change who owns it, without moving it"],
-              ["close", "Close this lot", "Export, domestic sale, or loss — final"],
+              ["send", "Send", "Hand this lot to another party"],
+              ["split", "Split", "Divide into two or more lots"],
+              ["combine", "Combine", "Merge with compatible lots you hold"],
+              ["process", "Process", "Drying, milling, or similar"],
+              ["transfer", "Transfer ownership", "Change owner without moving the lot"],
+              ["close", "Close this lot", "Export, domestic sale, or loss"],
             ] as const
           ).map(([key, title, sub]) => (
             <button key={key} type="button" className="action-btn" onClick={() => onAction(key)}>
@@ -445,8 +445,7 @@ function AddAkrabiForm({
         Add a new akrabi
       </h3>
       <p className="helper-note">
-        This brings the akrabi and their processing site into your network in one step. You&apos;ll
-        add their farmers separately, from the akrabi&apos;s own profile.
+        This adds the aggregator and their processing site. Farmers are added later.
       </p>
       <form onSubmit={submit}>
         <h3 className="subhead">Akrabi</h3>
@@ -457,7 +456,7 @@ function AddAkrabiForm({
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Tolera Guyo"
+            placeholder="Tolera Guyo"
           />
         </div>
         <div className="field">
@@ -467,7 +466,7 @@ function AddAkrabiForm({
             type="text"
             value={ref}
             onChange={(e) => setRef(e.target.value)}
-            placeholder="e.g. REG-AK-1010"
+            placeholder="REG-AK-1010"
           />
         </div>
         <div className="field">
@@ -486,7 +485,7 @@ function AddAkrabiForm({
             type="text"
             value={zone}
             onChange={(e) => setZone(e.target.value)}
-            placeholder="e.g. Gedeo"
+            placeholder="Gedeo"
           />
         </div>
         <div className="field">
@@ -496,7 +495,7 @@ function AddAkrabiForm({
             type="text"
             value={woreda}
             onChange={(e) => setWoreda(e.target.value)}
-            placeholder="e.g. Yirgacheffe"
+            placeholder="Yirgacheffe"
           />
         </div>
         <div className="field">
@@ -506,7 +505,7 @@ function AddAkrabiForm({
             type="text"
             value={years}
             onChange={(e) => setYears(e.target.value)}
-            placeholder="e.g. 6"
+            placeholder="6"
           />
         </div>
 
@@ -531,7 +530,7 @@ function AddAkrabiForm({
             type="text"
             value={facilityName}
             onChange={(e) => setFacilityName(e.target.value)}
-            placeholder="e.g. Yirgacheffe Washing Station"
+            placeholder="Yirgacheffe Washing Station"
           />
         </div>
         <div className="field">
@@ -541,7 +540,7 @@ function AddAkrabiForm({
             type="text"
             value={facilityKebele}
             onChange={(e) => setFacilityKebele(e.target.value)}
-            placeholder="e.g. Gersay"
+            placeholder="Gersay"
           />
         </div>
         <div className="field">
@@ -551,7 +550,7 @@ function AddAkrabiForm({
             type="text"
             value={facilityCapacity}
             onChange={(e) => setFacilityCapacity(e.target.value)}
-            placeholder="e.g. 3000"
+            placeholder="3000"
           />
         </div>
         <div className="field">
@@ -561,7 +560,7 @@ function AddAkrabiForm({
             type="text"
             value={facilityOperator}
             onChange={(e) => setFacilityOperator(e.target.value)}
-            placeholder="e.g. site manager's name"
+            placeholder="Operator name"
           />
         </div>
         <button type="submit">Add akrabi</button>
@@ -615,7 +614,7 @@ function NewLotForm({
       setSelectedLotId(null);
       refresh();
       toast(
-        `${lotCode(lot.lotId)} created — ${lot.canonicalMassKg}kg ${stateLabel(lot.processingState)}.`,
+        `${lotCode(lot.lotId)} created: ${lot.canonicalMassKg}kg ${stateLabel(lot.processingState)}.`,
       );
     } catch (err) {
       catchInv(err, toast);
@@ -632,7 +631,7 @@ function NewLotForm({
       </h3>
       <form onSubmit={submit}>
         <div className="field">
-          <label htmlFor="nl-farmer">Which farmer is this coffee from?</label>
+          <label htmlFor="nl-farmer">Farmer</label>
           <select id="nl-farmer" value={farmerId} onChange={(e) => setFarmerId(e.target.value)}>
             {actors.map((a) => (
               <option key={a.actorId} value={a.actorId}>
@@ -643,8 +642,8 @@ function NewLotForm({
         </div>
         <p className="helper-note">
           {farmerId === actingActorId
-            ? "You are the farmer, so this will be marked farmer-verified."
-            : `You are recording this on behalf of ${actorLabel(ledger, farmerId)} — it will be marked as recorded by a counterparty, not farmer-verified, until confirmed.`}
+            ? "You are the farmer. This will be marked farmer-verified."
+            : `Recording on behalf of ${actorLabel(ledger, farmerId)}. Marked as recorded by a counterparty until confirmed.`}
         </p>
         <div className="field">
           <label htmlFor="nl-mass">Mass (kg)</label>
@@ -741,10 +740,10 @@ function ConfirmReceiptForm({
       setAction(null);
       setMovementId(null);
       refresh();
-      if (result.state === "received_clean") toast("Receipt confirmed — matches exactly.");
+      if (result.state === "received_clean") toast("Receipt confirmed. Weights match.");
       else
         toast(
-          `Receipt confirmed with a ${(receiverDeclaredKg - mv!.senderDeclaredKg).toFixed(2)}kg discrepancy — logged, both figures kept.`,
+          `Receipt confirmed with a ${(receiverDeclaredKg - mv!.senderDeclaredKg).toFixed(2)}kg discrepancy. Both figures are kept.`,
         );
     } catch (err) {
       catchInv(err, toast);
@@ -764,7 +763,7 @@ function ConfirmReceiptForm({
       </p>
       <form onSubmit={submit}>
         <div className="field">
-          <label htmlFor="mr-mass">What did you actually receive (kg)?</label>
+          <label htmlFor="mr-mass">Weight received (kg)</label>
           <input
             id="mr-mass"
             type="number"
@@ -920,7 +919,7 @@ function SendForm({
       clearSelection();
       refresh();
       toast(
-        `${lotCode(lot.lotId)} sent to ${actorLabel(ledger, toId)} — awaiting their confirmation.`,
+        `${lotCode(lot.lotId)} sent to ${actorLabel(ledger, toId)}. Waiting for confirmation.`,
       );
     } catch (err) {
       catchInv(err, toast);
@@ -933,7 +932,7 @@ function SendForm({
         ← back to {lotCode(lot.lotId)}
       </span>
       <h3 style={{ fontFamily: "var(--font)", fontSize: 20, margin: "0 0 16px" }}>
-        Send {lotCode(lot.lotId)} to someone else
+        Send {lotCode(lot.lotId)}
       </h3>
       {others.length === 0 ? (
         <p className="warn-note">No allowed recipients for this role.</p>
@@ -964,14 +963,13 @@ function SendForm({
           <input
             id="ms-loc"
             type="text"
-            placeholder="e.g. Yirgacheffe Washing Station"
+            placeholder="Yirgacheffe Washing Station"
             value={loc}
             onChange={(e) => setLoc(e.target.value)}
           />
         </div>
         <p className="helper-note">
-          The receiver will confirm the weight on arrival. If it doesn&apos;t match, that&apos;s logged
-          as a discrepancy — not a problem you need to fix here.
+          The receiver will confirm the weight on arrival. A mismatch is logged as a discrepancy.
         </p>
         <button type="submit">Send</button>
       </form>
@@ -1028,8 +1026,7 @@ function SplitForm({
         Split {lotCode(lot.lotId)}
       </h3>
       <p className="helper-note">
-        Total to divide: {lot.canonicalMassKg}kg. Add as many rows as you need — they must add up to
-        exactly {lot.canonicalMassKg}kg.
+        Total to divide: {lot.canonicalMassKg}kg. Rows must add up to exactly {lot.canonicalMassKg}kg.
       </p>
       <form onSubmit={submit}>
         {rows.map((v, i) => (
@@ -1068,7 +1065,7 @@ function SplitForm({
         </button>
         <div className={`remainder ${remainder === 0 ? "zero" : "nonzero"}`}>
           {remainder === 0
-            ? "Fully allocated — ready to split."
+            ? "Fully allocated. Ready to split."
             : `Remaining to allocate: ${remainder}kg`}
         </div>
         <button type="submit" disabled={remainder !== 0}>
@@ -1145,7 +1142,7 @@ function CombineForm({
       <form onSubmit={submit}>
         <div className="compat-list">
           {candidates.length === 0 ? (
-            <div className="compat-row">No other lots in this actor&apos;s custody right now.</div>
+            <div className="compat-row">No other lots in custody right now.</div>
           ) : (
             candidates.map((c) => {
               const compatible =
@@ -1160,7 +1157,7 @@ function CombineForm({
                     onChange={() => toggle(c.lotId)}
                   />
                   <span>
-                    {lotCode(c.lotId)} — {stateLabel(c.processingState)}, {c.canonicalMassKg}kg
+                    {lotCode(c.lotId)} · {stateLabel(c.processingState)}, {c.canonicalMassKg}kg
                     {compatible ? "" : " (different form/route)"}
                   </span>
                 </div>
@@ -1242,7 +1239,7 @@ function ProcessForm({
       clearSelection();
       refresh();
       toast(
-        `${lotCode(out.lotId)} produced — ${out.canonicalMassKg}kg ${stateLabel(out.processingState)}.`,
+        `${lotCode(out.lotId)} produced: ${out.canonicalMassKg}kg ${stateLabel(out.processingState)}.`,
       );
     } catch (err) {
       catchInv(err, toast);
@@ -1258,8 +1255,7 @@ function ProcessForm({
         Process {lotCode(lot.lotId)}
       </h3>
       <p className="helper-note">
-        Total input: {totalInput}kg. Enter what&apos;s removed as reject or lost — the rest becomes
-        your output automatically.
+        Total input: {totalInput}kg. Reject and loss are subtracted; the rest is output.
       </p>
       <form onSubmit={submit}>
         {candidates.length > 0 && (
@@ -1274,7 +1270,7 @@ function ProcessForm({
                     onChange={() => toggle(c.lotId)}
                   />
                   <span>
-                    {lotCode(c.lotId)} — {c.canonicalMassKg}kg
+                    {lotCode(c.lotId)} · {c.canonicalMassKg}kg
                   </span>
                 </div>
               ))}
@@ -1317,8 +1313,8 @@ function ProcessForm({
         </div>
         {!eligible && lossKg > 0 && (
           <p className="warn-note">
-            Loss usually isn&apos;t valid on this form of coffee — this will likely be rejected unless
-            another input lot in the batch is eligible.
+            Loss is not usually valid on this form of coffee unless another input lot in the batch
+            is eligible.
           </p>
         )}
         <div className={`computed-output${product < 0 ? " invalid" : ""}`}>
@@ -1399,8 +1395,8 @@ function TransferForm({
         Transfer ownership of {lotCode(lot.lotId)}
       </h3>
       <p className="helper-note">
-        Currently owned by {actorLabel(ledger, lot.ownerActorId)}. This does not move the lot —
-        custody and location stay the same.
+        Currently owned by {actorLabel(ledger, lot.ownerActorId)}. Custody and location stay the
+        same.
       </p>
       {transferTargets.length === 0 ? (
         <p className="warn-note">No allowed owners for this role.</p>
@@ -1453,7 +1449,7 @@ function CloseForm({
       });
       clearSelection();
       refresh();
-      toast(`${lotCode(lot.lotId)} closed — ${REASON_LABELS[reason]}.`);
+      toast(`${lotCode(lot.lotId)} closed (${REASON_LABELS[reason]}).`);
     } catch (err) {
       catchInv(err, toast);
     }
@@ -1468,7 +1464,7 @@ function CloseForm({
         Close {lotCode(lot.lotId)}
       </h3>
       <p className="warn-note">
-        This permanently removes the lot from active inventory. It cannot be undone.
+        This removes the lot from active inventory. It cannot be undone.
       </p>
       <form onSubmit={submit}>
         <div className="field">

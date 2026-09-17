@@ -16,7 +16,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <RoleGate>
-      <LedgerProvider>
+      <LedgerProvider userName={userName} companyName={companyName}>
         <AppShell
           userName={userName}
           companyName={companyName}

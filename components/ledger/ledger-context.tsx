@@ -35,7 +35,15 @@ type LedgerContextValue = {
 
 const LedgerContext = createContext<LedgerContextValue | null>(null);
 
-export function LedgerProvider({ children }: { children: ReactNode }) {
+export function LedgerProvider({
+  children,
+  userName = "",
+  companyName = "",
+}: {
+  children: ReactNode;
+  userName?: string;
+  companyName?: string;
+}) {
   const boot = useMemo(() => getClientLedger(), []);
   const roleSession = useMemo(() => getRoleSession(), []);
 
@@ -61,6 +69,29 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (resolved) setActingActorIdState(resolved.actorId);
   }, [resolved]);
+
+  // Exporter identity = logged-in person (name) on the single rich seed profile.
+  const applyExporterIdentity = useCallback(() => {
+    const exporters = [...boot.ledger.actors.values()].filter(
+      (a) => a.actorType === "exporter",
+    );
+    const exporter = exporters[0];
+    if (!exporter) return;
+    if (userName.trim()) {
+      exporter.displayName = userName.trim();
+      exporter.metadata.contactPerson = userName.trim();
+    }
+    if (companyName.trim()) {
+      exporter.metadata.companyName = companyName.trim();
+    }
+  }, [boot.ledger, userName, companyName]);
+
+  applyExporterIdentity();
+
+  useEffect(() => {
+    applyExporterIdentity();
+    setVersion((v) => v + 1);
+  }, [applyExporterIdentity]);
 
   const refresh = useCallback(() => {
     boot.assignCodes();

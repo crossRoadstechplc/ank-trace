@@ -18,8 +18,8 @@ const plexSerif = IBM_Plex_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Ankuaru — Ledger Workspace",
-  description: "Coffee lot ledger demo with email OTP login",
+  title: "Ankuaru",
+  description: "Coffee lot ledger with OTP sign-in",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

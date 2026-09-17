@@ -116,8 +116,7 @@ export function LineageTracePanel({
     <div className="tabpanel active">
       <h2 className="section-title">Lineage trace</h2>
       <p className="helper-note">
-        Walk backward from any lot to farmer origin. The seeded demo cascades cherry through
-        aggregation and processing with exact weight accounting, ending at FOB.
+        Trace a lot back to origin farms.
       </p>
       <div className="field">
         <label htmlFor="trace-lot">Select a lot</label>
@@ -219,13 +218,12 @@ export function LineageTracePanel({
                 </>
               ) : (
                 <span style={{ color: "var(--ink-soft)", fontSize: 12.5 }}>
-                  No downstream lot — this is the end of the recorded chain.
+                  No further lots recorded.
                 </span>
               )}
             </div>
             <p className="helper-note" style={{ margin: "10px 0 0" }}>
-              Forward visibility is capped at one hop. Open a child lot above to keep walking
-              downstream.
+              Shows the next hop only. Open a child lot to continue.
             </p>
           </LtSection>
         </div>

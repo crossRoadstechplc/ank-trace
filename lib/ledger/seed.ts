@@ -13,11 +13,16 @@ export interface AkrabiSite {
   route: SiteRoute;
 }
 
-/** Compact demo sites — three rich chains for role pick / dashboards. */
+/** Full exporter network — many aggregators; first three stay demo-selectable for role pick. */
 export const AKRABI_SITES: AkrabiSite[] = [
   { place: "Yirgacheffe", zone: "Gedeo", woreda: "Yirgacheffe", region: "South Ethiopia", lat: 6.17, lng: 38.21, route: "washed" },
   { place: "Bensa", zone: "Sidama", woreda: "Bensa", region: "Sidama", lat: 6.7, lng: 38.55, route: "natural" },
   { place: "Yirgalem", zone: "Sidama", woreda: "Dale", region: "Sidama", lat: 6.75, lng: 38.417, route: "mixed" },
+  { place: "Kochere", zone: "Gedeo", woreda: "Kochere", region: "South Ethiopia", lat: 5.95, lng: 38.25, route: "washed" },
+  { place: "Hambela", zone: "Guji", woreda: "Hambela Wamena", region: "Oromia", lat: 5.78, lng: 38.82, route: "natural" },
+  { place: "Aleta Wondo", zone: "Sidama", woreda: "Aleta Wondo", region: "Sidama", lat: 6.58, lng: 38.42, route: "washed" },
+  { place: "Dilla", zone: "Gedeo", woreda: "Dilla Zuria", region: "South Ethiopia", lat: 6.41, lng: 38.31, route: "mixed" },
+  { place: "Shakiso", zone: "Guji", woreda: "Shakiso", region: "Oromia", lat: 5.77, lng: 38.91, route: "natural" },
 ];
 
 export const GIVEN_SOUTH_M = [
@@ -89,12 +94,22 @@ export interface SeededNetwork {
 }
 
 export function seedNetwork(ledger: Ledger): SeededNetwork {
-  const exporter = ledger.onboardActor("exporter", "Sidama Gold Export PLC", "REG-EXP-2201", null, {
-    address: "Bole Sub-City, Addis Ababa",
+  // Single rich exporter — display name is overwritten at runtime with the logged-in user.
+  const exporter = ledger.onboardActor("exporter", "Exporter", "REG-EXP-2201", null, {
+    address: "Bole Sub-City, Woreda 03, Addis Ababa",
     exportLicense: "ETH-EXP-88231",
     nbeRegistration: "NBE-FX-4471",
-    contactPerson: "Meron Assefa",
+    contactPerson: "",
     contactPhone: "+251 91 122 3344",
+    companyName: "Sidama Gold Export PLC",
+    warehouse: "Central warehouse, Bole, Addis Ababa",
+    yearsOperating: "12",
+    primaryDestinations: "Germany, Japan, USA, South Korea",
+    annualVolumeBags: "48,000",
+    certifications: "Organic, Fairtrade, Rainforest Alliance",
+    bank: "Commercial Bank of Ethiopia, FX desk",
+    tin: "0001234567",
+    demoSelectable: "true",
   });
 
   let farmerSeq = 0;
@@ -102,6 +117,85 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
   const stations: SeededNetwork["stations"] = [];
   const allFarmers: Actor[] = [];
   const deliveries: SeededNetwork["deliveries"] = [];
+  /** Green lots held by exporter, keyed for multi-aggregator export blends. */
+  const exporterGreensByRoute: Record<"washed" | "natural", Lot[]> = {
+    washed: [],
+    natural: [],
+  };
+
+  function processToGreen(
+    combined: Lot,
+    cherryIn: number,
+    route: ProcessingRoute,
+    station: Actor,
+  ): Lot {
+    if (route === "washed") {
+      const parchOut = Math.round(cherryIn * 0.55);
+      const parchReject = Math.round(cherryIn * 0.05);
+      const parchLoss = cherryIn - parchOut - parchReject;
+      const parchment = ledger.process({
+        inputLotIds: [combined.lotId],
+        outputState: "dry_parchment",
+        outputMassKg: parchOut,
+        rejectKg: parchReject,
+        lossKg: parchLoss,
+        executingPersonId: station.actorId,
+        actingActorId: station.actorId,
+        lossCategory: "moisture",
+      });
+      const greenOut = Math.round((parchOut * 500) / 550);
+      return ledger.process({
+        inputLotIds: [parchment.lotId],
+        outputState: "green_washed",
+        outputMassKg: greenOut,
+        rejectKg: parchOut - greenOut,
+        lossKg: 0,
+        executingPersonId: station.actorId,
+        actingActorId: station.actorId,
+      });
+    }
+    const driedOut = Math.round(cherryIn * 0.4);
+    const driedReject = Math.round(cherryIn * 0.03);
+    const driedLoss = cherryIn - driedOut - driedReject;
+    const dried = ledger.process({
+      inputLotIds: [combined.lotId],
+      outputState: "dried_cherry",
+      outputMassKg: driedOut,
+      rejectKg: driedReject,
+      lossKg: driedLoss,
+      executingPersonId: station.actorId,
+      actingActorId: station.actorId,
+      lossCategory: "sun-drying moisture loss",
+    });
+    const greenOut = Math.round(driedOut * 0.85);
+    return ledger.process({
+      inputLotIds: [dried.lotId],
+      outputState: "green_natural",
+      outputMassKg: greenOut,
+      rejectKg: driedOut - greenOut,
+      lossKg: 0,
+      executingPersonId: station.actorId,
+      actingActorId: station.actorId,
+    });
+  }
+
+  function shipGreenToExporter(finalLot: Lot, station: Actor): void {
+    ledger.transferOwnership({
+      lotId: finalLot.lotId,
+      newOwnerActorId: exporter.actorId,
+      executingPersonId: station.actorId,
+      actingActorId: station.actorId,
+    });
+    moveReceive(
+      ledger,
+      finalLot.lotId,
+      station.actorId,
+      exporter.actorId,
+      finalLot.canonicalMassKg,
+      finalLot.canonicalMassKg,
+      `${exporter.metadata.companyName || exporter.displayName} central warehouse, Addis Ababa`,
+    );
+  }
 
   AKRABI_SITES.forEach((site, si) => {
     const akrabiName =
@@ -145,8 +239,8 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
     );
     stations.push({ station, site, isMill });
 
-    // Three farmers per aggregator — first is the selectable demo farmer (keeps inventory).
-    const farmerCount = 3;
+    // Many farms per aggregator — first three sites keep one demo-selectable farmer.
+    const farmerCount = 6;
     const farmers: Actor[] = [];
     for (let f = 0; f < farmerCount; f++) {
       farmerSeq++;
@@ -154,7 +248,7 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
       const farmerLng = site.lng + Math.cos(farmerSeq * 7.3) * 0.03;
       const farmer = ledger.onboardActor(
         "farmer",
-        generateFarmerName(site, f + si * 3),
+        generateFarmerName(site, f + si * 7),
         `FAYDA-${String(2000 + farmerSeq).padStart(6, "0")}`,
         akrabi.actorId,
         {
@@ -169,33 +263,26 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
           yearsFarming: String(5 + ((f * 3 + si) % 30)),
           lat: farmerLat,
           lng: farmerLng,
-          demoSelectable: f === 0 ? "true" : "false",
+          demoSelectable: si < 3 && f === 0 ? "true" : "false",
         },
       );
       farmers.push(farmer);
       allFarmers.push(farmer);
     }
 
-    // Tag aggregator for role pick (all three sites are demo-selectable).
-    akrabi.metadata.demoSelectable = "true";
+    // Role pick still offers three aggregators; the rest feed the exporter network only.
+    akrabi.metadata.demoSelectable = si < 3 ? "true" : "false";
 
-    // One complete historical cycle (closed at FOB) + one open cycle that leaves
-    // green with the exporter and cherry with the akrabi / demo farmer.
-    const cycleCount = 2;
-    for (let c = 0; c < cycleCount; c++) {
-      const useFarmers = farmers.slice(0, 2 + (c % 2)); // 2–3 farmers per cycle
-
+    // Historical FOB cycle: all farms at this site → green → exporter → FOB.
+    {
       const route: ProcessingRoute =
         site.route === "mixed"
-          ? c % 2 === 0
-            ? "washed"
-            : "natural"
+          ? "washed"
           : site.route === "natural"
             ? "natural"
             : "washed";
-
-      const origins = useFarmers.map((farmer, k) => {
-        const kg = 220 + ((si * 7 + c * 13 + k * 29) % 280);
+      const origins = farmers.map((farmer, k) => {
+        const kg = 180 + ((si * 11 + k * 23) % 220);
         const lot = ledger.createOriginLot({
           farmerActorId: farmer.actorId,
           recordedByActorId: farmer.actorId,
@@ -206,7 +293,7 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
           locationId: `${site.place}, ${site.woreda}`,
           cropYear: "2025-2026",
         });
-        const recvKg = (c + k) % 5 === 0 ? kg - 3 : kg;
+        const recvKg = k % 5 === 0 ? kg - 2 : kg;
         moveReceive(
           ledger,
           lot.lotId,
@@ -218,23 +305,12 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
         );
         return lot;
       });
-
       const cherryIn = origins.reduce((s, l) => s + l.canonicalMassKg, 0);
-      const combined =
-        origins.length > 1
-          ? ledger.aggregate({
-              parentLotIds: origins.map((l) => l.lotId),
-              executingPersonId: akrabi.actorId,
-              actingActorId: akrabi.actorId,
-            })
-          : origins[0];
-
-      // Open cycle: leave aggregated cherry with akrabi (demo inventory).
-      if (c === cycleCount - 1) {
-        deliveries.push({ akrabi, station, finalLot: combined, route, cherryIn });
-        continue;
-      }
-
+      const combined = ledger.aggregate({
+        parentLotIds: origins.map((l) => l.lotId),
+        executingPersonId: akrabi.actorId,
+        actingActorId: akrabi.actorId,
+      });
       moveReceive(
         ledger,
         combined.lotId,
@@ -244,77 +320,8 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
         cherryIn,
         `${stationName}, ${site.place}`,
       );
-
-      let finalLot: Lot;
-      if (route === "washed") {
-        const parchOut = Math.round(cherryIn * 0.55);
-        const parchReject = Math.round(cherryIn * 0.05);
-        const parchLoss = cherryIn - parchOut - parchReject;
-        const parchment = ledger.process({
-          inputLotIds: [combined.lotId],
-          outputState: "dry_parchment",
-          outputMassKg: parchOut,
-          rejectKg: parchReject,
-          lossKg: parchLoss,
-          executingPersonId: station.actorId,
-          actingActorId: station.actorId,
-          lossCategory: "moisture",
-        });
-        const greenOut = Math.round((parchOut * 500) / 550);
-        const greenReject = parchOut - greenOut;
-        finalLot = ledger.process({
-          inputLotIds: [parchment.lotId],
-          outputState: "green_washed",
-          outputMassKg: greenOut,
-          rejectKg: greenReject,
-          lossKg: 0,
-          executingPersonId: station.actorId,
-          actingActorId: station.actorId,
-        });
-      } else {
-        const driedOut = Math.round(cherryIn * 0.4);
-        const driedReject = Math.round(cherryIn * 0.03);
-        const driedLoss = cherryIn - driedOut - driedReject;
-        const dried = ledger.process({
-          inputLotIds: [combined.lotId],
-          outputState: "dried_cherry",
-          outputMassKg: driedOut,
-          rejectKg: driedReject,
-          lossKg: driedLoss,
-          executingPersonId: station.actorId,
-          actingActorId: station.actorId,
-          lossCategory: "sun-drying moisture loss",
-        });
-        const greenOut = Math.round(driedOut * 0.85);
-        const greenReject = driedOut - greenOut;
-        finalLot = ledger.process({
-          inputLotIds: [dried.lotId],
-          outputState: "green_natural",
-          outputMassKg: greenOut,
-          rejectKg: greenReject,
-          lossKg: 0,
-          executingPersonId: station.actorId,
-          actingActorId: station.actorId,
-        });
-      }
-
-      ledger.transferOwnership({
-        lotId: finalLot.lotId,
-        newOwnerActorId: exporter.actorId,
-        executingPersonId: station.actorId,
-        actingActorId: station.actorId,
-      });
-      moveReceive(
-        ledger,
-        finalLot.lotId,
-        station.actorId,
-        exporter.actorId,
-        finalLot.canonicalMassKg,
-        finalLot.canonicalMassKg,
-        `${exporter.displayName} central warehouse, Addis Ababa`,
-      );
-
-      // Historical cycle closed at FOB
+      const finalLot = processToGreen(combined, cherryIn, route, station);
+      shipGreenToExporter(finalLot, station);
       ledger.terminalDispose({
         lotId: finalLot.lotId,
         reason: "fob_export",
@@ -324,101 +331,136 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
       deliveries.push({ akrabi, station, finalLot, route, cherryIn });
     }
 
+    // Open cycle: leave aggregated cherry with akrabi (demo inventory for first sites).
+    {
+      const route: ProcessingRoute =
+        site.route === "natural" ? "natural" : "washed";
+      const useFarmers = farmers.slice(0, 4);
+      const origins = useFarmers.map((farmer, k) => {
+        const kg = 200 + ((si * 9 + k * 17) % 160);
+        const lot = ledger.createOriginLot({
+          farmerActorId: farmer.actorId,
+          recordedByActorId: farmer.actorId,
+          executingPersonId: farmer.actorId,
+          massKg: kg,
+          processingState: "cherry",
+          processingRoute: route,
+          locationId: `${site.place}, ${site.woreda}`,
+          cropYear: "2025-2026",
+        });
+        moveReceive(
+          ledger,
+          lot.lotId,
+          farmer.actorId,
+          akrabi.actorId,
+          kg,
+          kg,
+          `${akrabiName} store, ${site.place}`,
+        );
+        return lot;
+      });
+      const cherryIn = origins.reduce((s, l) => s + l.canonicalMassKg, 0);
+      const combined = ledger.aggregate({
+        parentLotIds: origins.map((l) => l.lotId),
+        executingPersonId: akrabi.actorId,
+        actingActorId: akrabi.actorId,
+      });
+      deliveries.push({ akrabi, station, finalLot: combined, route, cherryIn });
+    }
+
+    // Active multi-farm green contribution for the exporter blend (not yet FOB).
+    {
+      const route: ProcessingRoute =
+        site.route === "natural" ? "natural" : "washed";
+      const origins = farmers.map((farmer, k) => {
+        const kg = 240 + ((si * 13 + k * 19) % 200);
+        const lot = ledger.createOriginLot({
+          farmerActorId: farmer.actorId,
+          recordedByActorId: farmer.actorId,
+          executingPersonId: farmer.actorId,
+          massKg: kg,
+          processingState: "cherry",
+          processingRoute: route,
+          locationId: `${site.place}, ${site.woreda}`,
+          cropYear: "2025-2026",
+        });
+        moveReceive(
+          ledger,
+          lot.lotId,
+          farmer.actorId,
+          akrabi.actorId,
+          kg,
+          kg,
+          `${akrabiName} store, ${site.place}`,
+        );
+        return lot;
+      });
+      const cherryIn = origins.reduce((s, l) => s + l.canonicalMassKg, 0);
+      const combined = ledger.aggregate({
+        parentLotIds: origins.map((l) => l.lotId),
+        executingPersonId: akrabi.actorId,
+        actingActorId: akrabi.actorId,
+      });
+      moveReceive(
+        ledger,
+        combined.lotId,
+        akrabi.actorId,
+        station.actorId,
+        cherryIn,
+        cherryIn,
+        `${stationName}, ${site.place}`,
+      );
+      const green = processToGreen(combined, cherryIn, route, station);
+      shipGreenToExporter(green, station);
+      exporterGreensByRoute[route].push(green);
+      deliveries.push({ akrabi, station, finalLot: green, route, cherryIn });
+    }
+
     // Demo farmer keeps fresh cherry in custody for workspace demo.
-    const demoFarmer = farmers[0];
-    ledger.createOriginLot({
-      farmerActorId: demoFarmer.actorId,
-      recordedByActorId: demoFarmer.actorId,
-      executingPersonId: demoFarmer.actorId,
-      massKg: 310 + si * 40,
-      processingState: "cherry",
-      processingRoute: site.route === "natural" ? "natural" : "washed",
-      locationId: `${site.place}, ${site.woreda}`,
-      cropYear: "2025-2026",
+    if (si < 3) {
+      const demoFarmer = farmers[0];
+      ledger.createOriginLot({
+        farmerActorId: demoFarmer.actorId,
+        recordedByActorId: demoFarmer.actorId,
+        executingPersonId: demoFarmer.actorId,
+        massKg: 310 + si * 40,
+        processingState: "cherry",
+        processingRoute: site.route === "natural" ? "natural" : "washed",
+        locationId: `${site.place}, ${site.woreda}`,
+        cropYear: "2025-2026",
+      });
+    }
+  });
+
+  // Exporter blends greens across aggregators → one lineage root spanning many farms.
+  const blendLots: Lot[] = [];
+  (["washed", "natural"] as const).forEach((route) => {
+    const greens = exporterGreensByRoute[route];
+    if (greens.length < 2) return;
+    const blend = ledger.aggregate({
+      parentLotIds: greens.map((g) => g.lotId),
+      executingPersonId: exporter.actorId,
+      actingActorId: exporter.actorId,
+    });
+    blendLots.push(blend);
+    deliveries.push({
+      akrabi: akrabis[0].akrabi,
+      station: stations[0].station,
+      finalLot: blend,
+      route,
+      cherryIn: greens.reduce((s, g) => s + g.canonicalMassKg, 0),
     });
   });
 
-  // Leave one green lot with the exporter (from a short open export receive).
-  // Rebuild a small washed lot path for exporter inventory using first site's station.
-  {
-    const { akrabi, site } = akrabis[0];
-    const station = stations[0].station;
-    const farmer = allFarmers[0];
-    const kg = 400;
-    const origin = ledger.createOriginLot({
-      farmerActorId: farmer.actorId,
-      recordedByActorId: farmer.actorId,
-      executingPersonId: farmer.actorId,
-      massKg: kg,
-      processingState: "cherry",
-      processingRoute: "washed",
-      locationId: `${site.place}, ${site.woreda}`,
-      cropYear: "2025-2026",
-    });
-    moveReceive(
-      ledger,
-      origin.lotId,
-      farmer.actorId,
-      akrabi.actorId,
-      kg,
-      kg,
-      `${akrabi.displayName} store, ${site.place}`,
-    );
-    moveReceive(
-      ledger,
-      origin.lotId,
-      akrabi.actorId,
-      station.actorId,
-      kg,
-      kg,
-      `${station.displayName}, ${site.place}`,
-    );
-    const parchOut = Math.round(kg * 0.55);
-    const parchReject = Math.round(kg * 0.05);
-    const parchLoss = kg - parchOut - parchReject;
-    const parchment = ledger.process({
-      inputLotIds: [origin.lotId],
-      outputState: "dry_parchment",
-      outputMassKg: parchOut,
-      rejectKg: parchReject,
-      lossKg: parchLoss,
-      executingPersonId: station.actorId,
-      actingActorId: station.actorId,
-      lossCategory: "moisture",
-    });
-    const greenOut = Math.round((parchOut * 500) / 550);
-    const greenReject = parchOut - greenOut;
-    const green = ledger.process({
-      inputLotIds: [parchment.lotId],
-      outputState: "green_washed",
-      outputMassKg: greenOut,
-      rejectKg: greenReject,
-      lossKg: 0,
-      executingPersonId: station.actorId,
-      actingActorId: station.actorId,
-    });
-    ledger.transferOwnership({
-      lotId: green.lotId,
-      newOwnerActorId: exporter.actorId,
-      executingPersonId: station.actorId,
-      actingActorId: station.actorId,
-    });
-    moveReceive(
-      ledger,
-      green.lotId,
-      station.actorId,
-      exporter.actorId,
-      green.canonicalMassKg,
-      green.canonicalMassKg,
-      `${exporter.displayName} central warehouse, Addis Ababa`,
-    );
-    deliveries.push({
-      akrabi,
-      station,
-      finalLot: green,
-      route: "washed",
-      cherryIn: kg,
-    });
+  // Prefer the washed multi-aggregator blend for lineage trace (most farms).
+  if (blendLots.length) {
+    const preferred = blendLots.find((l) => l.processingRoute === "washed") ?? blendLots[0];
+    // Move preferred blend to end so bootstrap picks it as preferredTraceLotId.
+    const idx = deliveries.findIndex((d) => d.finalLot.lotId === preferred.lotId);
+    if (idx >= 0) {
+      const [row] = deliveries.splice(idx, 1);
+      deliveries.push(row);
+    }
   }
 
   return { exporter, akrabis, stations, allFarmers, deliveries };

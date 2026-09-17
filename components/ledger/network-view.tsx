@@ -35,10 +35,10 @@ export function NetworkView() {
 
   const helper =
     sessionRole === "farmer"
-      ? "You only see your own farm identity in this network."
+      ? "Your farm profile."
       : sessionRole === "akrabi"
-        ? "Expand to see farmers and processing sites you sponsored."
-        : "Expand each aggregator to see processing sites. Farmer identities stay hidden.";
+        ? "Farmers and processing sites you sponsored."
+        : "Processing sites under each aggregator. Farmer names stay hidden.";
 
   function toggleSection(id: string) {
     setExpanded((prev) => {
@@ -87,7 +87,7 @@ export function NetworkView() {
         )
       ) : sections.length === 0 ? (
         <div className="empty-state">
-          {`${root ? root.displayName : "This actor"} hasn't onboarded anyone in scope yet.`}
+          {`${root ? root.displayName : "This account"} has not onboarded anyone yet.`}
         </div>
       ) : (
         <>
@@ -245,8 +245,8 @@ function ActorProfileModal({
     return (
       <div className="modal-overlay show" role="dialog" aria-modal="true">
         <div className="modal">
-          <h3>Protected</h3>
-          <p className="helper-note">Farmer identities are not visible to exporters.</p>
+          <h3>Hidden</h3>
+          <p className="helper-note">Farmer names are not shown to exporters.</p>
           <button type="button" className="secondary" onClick={onClose}>
             Close
           </button>
@@ -300,7 +300,7 @@ function ActorProfileModal({
         )}
         {sessionRole === "exporter" && actor.actorType === "akrabi" && (
           <p className="helper-note" style={{ marginTop: 14 }}>
-            Farmer directory under this aggregator is hidden from exporters.
+            Farmer names under this aggregator are hidden.
           </p>
         )}
         {children.length > 0 && (

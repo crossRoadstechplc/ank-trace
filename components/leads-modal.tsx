@@ -169,7 +169,7 @@ export function LeadsModal() {
             {error && <p className="warn-note">{error}</p>}
             <div className="btn-row">
               <button type="submit" disabled={busy}>
-                {busy ? "Checking…" : "Unlock"}
+                {busy ? "Checking..." : "Unlock"}
               </button>
               <button type="button" className="secondary" onClick={() => void closePanel()}>
                 Cancel
@@ -185,7 +185,7 @@ export function LeadsModal() {
               </button>
             </div>
             <p className="helper-note">
-              Everyone who requested a login code, with login counts and timestamps.
+            Login requests, counts, and timestamps.
             </p>
             {leads.length === 0 ? (
               <div className="empty-state">No leads yet.</div>

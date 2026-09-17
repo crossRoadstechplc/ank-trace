@@ -149,7 +149,7 @@ function LotsTab({
   return (
     <div className="tabpanel active">
       <div className="page-head">
-        <h2 className="section-title">Lots in your scope</h2>
+        <h2 className="section-title">Lots</h2>
       </div>
       <div className="table-wrap">
       <table>
@@ -265,12 +265,11 @@ function EventsTab({
       <div className="page-head">
         <h2 className="section-title">Activity</h2>
         <p className="helper-note">
-          Everything that has happened, newest first. Every entry is permanent — nothing here is
-          ever edited or removed once recorded.
+          Newest first. Recorded entries are not edited.
         </p>
       </div>
       {events.length === 0 ? (
-        <div className="empty-state">Nothing has happened yet.</div>
+        <div className="empty-state">No activity yet.</div>
       ) : (
         events.map((ev) => (
           <div className="activity-row" key={ev.eventId}>
@@ -278,7 +277,7 @@ function EventsTab({
             <div className="activity-text">
               {describeEvent(ledger, lotCode, ev, sessionRole)}
               {ev.correctsEventId ? (
-                <span className="activity-corrects"> — corrects an earlier entry</span>
+                <span className="activity-corrects"> (corrects an earlier entry)</span>
               ) : null}
             </div>
           </div>
@@ -312,8 +311,7 @@ function IntegrityTab({
       <div className="page-head">
         <h2 className="section-title">Integrity checks</h2>
         <p className="helper-note">
-          A live check of the ledger as it stands right now — traceability to farmer origin, weight
-          conservation across processing, and open shipment discrepancies.
+          Checks origin trace, weight conservation, and open shipment discrepancies.
         </p>
         <button
           type="button"
@@ -391,8 +389,8 @@ function runIntegrityChecks(ledger: Ledger, lotCode: (id: string) => string) {
           ? "No coffee has entered the ledger yet."
           : `${fmtKg(totalMinted)}kg has entered the ledger from harvest. ${fmtKg(totalActiveNow)}kg is currently held across active lots, ${fmtKg(totalClosed)}kg has been closed out (exported, sold, or destroyed), and ${fmtKg(totalRejectLoss)}kg was recorded as reject or weight loss.` +
             (Math.abs(diff) < 0.01
-              ? " Every kilogram is accounted for."
-              : ` ${fmtKg(Math.abs(diff))}kg is unaccounted for — this should never happen and needs investigation.`),
+              ? " Weights balance."
+              : ` ${fmtKg(Math.abs(diff))}kg is unaccounted for and needs investigation.`),
     });
   }
 
@@ -432,26 +430,26 @@ function describeEvent(
         ACTOR_TYPE_LABELS[p.actorType as keyof typeof ACTOR_TYPE_LABELS] || String(p.actorType)
       ).toLowerCase();
       const sponsor = p.sponsorActorId
-        ? ` — onboarded by ${name(p.sponsorActorId as string)}`
+        ? `, onboarded by ${name(p.sponsorActorId as string)}`
         : "";
       return `${name(p.actorId as string)} was added as a${/^[aeiou]/i.test(typeLabel) ? "n" : ""} ${typeLabel}${sponsor}.`;
     }
     case "origin_lot_created": {
       const lot = [...ledger.lots.values()].find((l) => l.createdEventId === ev.eventId);
       if (!lot) return "A new lot was recorded from harvest.";
-      return `${lotCode(lot.lotId)} was recorded — ${fmtKg(lot.canonicalMassKg)}kg of ${stateLabel(lot.processingState)} from ${name(p.farmerActorId as string)}.`;
+      return `${lotCode(lot.lotId)} was recorded: ${fmtKg(lot.canonicalMassKg)}kg of ${stateLabel(lot.processingState)} from ${name(p.farmerActorId as string)}.`;
     }
     case "movement_send": {
       const mv = ledger.movements.get(p.movementId as string);
-      return `${lotCode(p.lotId as string)} was sent to ${mv ? name(mv.toActorId) : "another actor"} — ${fmtKg(p.senderDeclaredKg as number)}kg declared.`;
+      return `${lotCode(p.lotId as string)} was sent to ${mv ? name(mv.toActorId) : "another party"} (${fmtKg(p.senderDeclaredKg as number)}kg declared).`;
     }
     case "movement_receive": {
       const mv = ledger.movements.get(p.movementId as string);
       if (!mv) return "A shipment was confirmed on receipt.";
-      const base = `${lotCode(mv.lotId)} was received by ${name(mv.toActorId)} — ${fmtKg(p.receiverDeclaredKg as number)}kg confirmed`;
+      const base = `${lotCode(mv.lotId)} was received by ${name(mv.toActorId)} (${fmtKg(p.receiverDeclaredKg as number)}kg confirmed)`;
       return (p.discrepancyKg as number) !== 0
-        ? `${base}, ${(p.discrepancyKg as number) > 0 ? "more" : "less"} than declared by ${fmtKg(Math.abs(p.discrepancyKg as number))}kg — flagged as a discrepancy.`
-        : `${base}, matching exactly what was sent.`;
+        ? `${base}, ${(p.discrepancyKg as number) > 0 ? "more" : "less"} than declared by ${fmtKg(Math.abs(p.discrepancyKg as number))}kg. Flagged as a discrepancy.`
+        : `${base}, matching what was sent.`;
     }
     case "ownership_transfer":
       return `${lotCode(p.lotId as string)} changed ownership to ${name(p.newOwnerActorId as string)}. Custody and location were not affected.`;
@@ -461,7 +459,7 @@ function describeEvent(
     }
     case "aggregate": {
       const child = [...ledger.lots.values()].find((l) => l.createdEventId === ev.eventId);
-      return `${(p.parentLotIds as string[]).map(lotCode).join(", ")} were combined into ${lotCode(child ? child.lotId : "")} — ${fmtKg(p.totalMassKg as number)}kg total.`;
+      return `${(p.parentLotIds as string[]).map(lotCode).join(", ")} were combined into ${lotCode(child ? child.lotId : "")} (${fmtKg(p.totalMassKg as number)}kg total).`;
     }
     case "process": {
       const out = [...ledger.lots.values()].find((l) => l.createdEventId === ev.eventId);
@@ -469,10 +467,10 @@ function describeEvent(
         (p.rejectKg as number) || (p.lossKg as number)
           ? ` (${fmtKg(p.rejectKg as number)}kg reject, ${fmtKg(p.lossKg as number)}kg loss)`
           : "";
-      return `${(p.inputLotIds as string[]).map(lotCode).join(", ")} became ${lotCode(out ? out.lotId : "")} — ${fmtKg(p.outputMassKg as number)}kg of ${stateLabel(p.outputState as string)}${extras}.`;
+      return `${(p.inputLotIds as string[]).map(lotCode).join(", ")} became ${lotCode(out ? out.lotId : "")}: ${fmtKg(p.outputMassKg as number)}kg of ${stateLabel(p.outputState as string)}${extras}.`;
     }
     case "terminal_disposition":
-      return `${lotCode(p.lotId as string)} was closed out — ${REASON_LABELS[p.reason as keyof typeof REASON_LABELS] || String(p.reason)}. It's permanently out of active inventory.`;
+      return `${lotCode(p.lotId as string)} was closed (${REASON_LABELS[p.reason as keyof typeof REASON_LABELS] || String(p.reason)}). It is out of active inventory.`;
     case "correction":
       return `A correction was recorded: ${String(p.reason)}.`;
     default:

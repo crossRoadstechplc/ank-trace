@@ -21,7 +21,7 @@ export function RoleGate({ children }: { children: ReactNode }) {
   if (!ready) {
     return (
       <div className="login-main">
-        <p className="helper-note">Loading workspace…</p>
+        <p className="helper-note">Loading workspace...</p>
       </div>
     );
   }
