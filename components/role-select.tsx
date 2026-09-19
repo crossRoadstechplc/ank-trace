@@ -37,7 +37,10 @@ export function RoleSelect() {
 
   const candidates = useMemo(() => {
     if (!role || role === "exporter") return [];
-    return actorsOfType(boot.ledger, role);
+    // Stable order for Farmer 1… / Aggregator 1… labels (not alphabetical names).
+    return [...actorsOfType(boot.ledger, role)].sort((a, b) =>
+      a.legalIdentityRef.localeCompare(b.legalIdentityRef),
+    );
   }, [boot.ledger, role]);
 
   function pickRole(r: SessionRole) {
@@ -59,6 +62,12 @@ export function RoleSelect() {
     if (!actor) return;
     setRoleSession({ role, legalIdentityRef: actor.legalIdentityRef });
     window.location.href = "/workspace";
+  }
+
+  function candidateLabel(index: number): string {
+    if (role === "farmer") return `Farmer ${index + 1}`;
+    if (role === "akrabi") return `Aggregator ${index + 1}`;
+    return `Option ${index + 1}`;
   }
 
   async function signOut() {
@@ -123,15 +132,14 @@ export function RoleSelect() {
               <div className="empty-state">No identities for this role.</div>
             ) : (
               <div className="role-actor-list">
-                {candidates.map((a) => (
+                {candidates.map((a, i) => (
                   <button
                     key={a.actorId}
                     type="button"
                     className="role-actor-row"
                     onClick={() => pickActor(a.actorId)}
                   >
-                    <b>{a.displayName}</b>
-                    <span className="mono-small">{a.legalIdentityRef}</span>
+                    <b>{candidateLabel(i)}</b>
                   </button>
                 ))}
               </div>

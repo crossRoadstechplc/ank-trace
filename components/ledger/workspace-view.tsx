@@ -51,6 +51,7 @@ export function WorkspaceView() {
     ledger,
     actingActorId,
     sessionRole,
+    actingDisplayName,
     selectedLotId,
     setSelectedLotId,
     lotCode,
@@ -180,7 +181,7 @@ export function WorkspaceView() {
 
       <div className="page-head">
         <h2 className="section-title">
-          {actor ? `Lots ${actor.displayName} is holding` : "Lots you're holding"}
+          {`Lots ${actingDisplayName} is holding`}
         </h2>
       </div>
 

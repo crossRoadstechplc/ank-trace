@@ -15,7 +15,7 @@ import {
 import { useLedger } from "./ledger-context";
 
 export function NetworkView() {
-  const { ledger, actingActorId, sessionRole, lotCode, version } = useLedger();
+  const { ledger, actingActorId, sessionRole, actingDisplayName, lotCode, version } = useLedger();
   const [profileId, setProfileId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
@@ -72,7 +72,7 @@ export function NetworkView() {
     <div className="view active">
       <div className="page-head">
         <h2 className="section-title">
-          {root ? `${root.displayName}'s network` : "Network"}
+          {`${actingDisplayName}'s network`}
         </h2>
         <p className="helper-note">{helper}</p>
       </div>
@@ -80,14 +80,18 @@ export function NetworkView() {
       {sessionRole === "farmer" ? (
         root ? (
           <div className="lot-grid">
-            <NetworkCard actor={root} onOpen={() => setProfileId(root.actorId)} />
+            <NetworkCard
+              actor={root}
+              label={actingDisplayName}
+              onOpen={() => setProfileId(root.actorId)}
+            />
           </div>
         ) : (
           <div className="empty-state">Your farm profile is not available.</div>
         )
       ) : sections.length === 0 ? (
         <div className="empty-state">
-          {`${root ? root.displayName : "This account"} has not onboarded anyone yet.`}
+          {`${actingDisplayName} has not onboarded anyone yet.`}
         </div>
       ) : (
         <>
@@ -127,7 +131,11 @@ export function NetworkView() {
                         setProfileId(akrabi.actorId);
                       }}
                     >
-                      <b>{akrabi.displayName}</b>
+                      <b>
+                        {akrabi.actorId === actingActorId
+                          ? actingDisplayName
+                          : akrabi.displayName}
+                      </b>
                     </div>
                     <div className="net-head-sub">
                       {loc}
@@ -192,7 +200,15 @@ export function NetworkView() {
   );
 }
 
-function NetworkCard({ actor, onOpen }: { actor: Actor; onOpen: () => void }) {
+function NetworkCard({
+  actor,
+  onOpen,
+  label,
+}: {
+  actor: Actor;
+  onOpen: () => void;
+  label?: string;
+}) {
   const meta = actor.metadata || {};
   const typeLabel = ACTOR_TYPE_LABELS[actor.actorType] || actor.actorType;
   const subBits: ReactNode[] = [];
@@ -210,7 +226,7 @@ function NetworkCard({ actor, onOpen }: { actor: Actor; onOpen: () => void }) {
     <div className="net-card" onClick={onOpen} role="button" tabIndex={0}>
       <span className="net-card-type">{typeLabel}</span>
       <div className="net-card-title">
-        <b>{actor.displayName}</b>
+        <b>{label ?? actor.displayName}</b>
       </div>
       <div className="net-card-sub">
         {subBits.map((bit, i) => (
@@ -237,7 +253,7 @@ function ActorProfileModal({
   lotCode: (id: string) => string;
   allowChildren: boolean;
 }) {
-  const { ledger, actingActorId, sessionRole } = useLedger();
+  const { ledger, actingActorId, sessionRole, actingDisplayName } = useLedger();
   const actor = ledger.actors.get(actorId);
   if (!actor) return null;
 
@@ -265,13 +281,15 @@ function ActorProfileModal({
     : [];
 
   const metaRows = fields.filter(([key]) => meta[key]);
+  const titleName =
+    actorId === actingActorId ? actingDisplayName : actor.displayName;
 
   return (
     <div className="modal-overlay show" role="dialog" aria-modal="true">
       <div className="modal modal-wide">
         <span className="net-card-type">{actorTypeLabel(actor.actorType)}</span>
         <h3 style={{ margin: "8px 0 2px" }}>
-          <b>{actor.displayName}</b>
+          <b>{titleName}</b>
         </h3>
         <p className="helper-note" style={{ margin: "0 0 14px" }}>
           {actor.legalIdentityRef}

@@ -30,7 +30,7 @@ const NAV = [
 
 export function AppShell({ children, userName, companyName, userContact }: AppShellProps) {
   const pathname = usePathname();
-  const { ledger, actingActorId, sessionRole, refresh, toast } = useLedger();
+  const { ledger, actingActorId, sessionRole, actingDisplayName, refresh, toast } = useLedger();
   const [onboardOpen, setOnboardOpen] = useState(false);
   const [busyLogout, setBusyLogout] = useState(false);
 
@@ -66,7 +66,7 @@ export function AppShell({ children, userName, companyName, userContact }: AppSh
             <div className="kicker">{dashboardKicker(sessionRole)}</div>
           </div>
           <div className="masthead-copy">
-            <h1>{actor ? actor.displayName : "Coffee lot ledger"}</h1>
+            <h1>{actingDisplayName}</h1>
             <p>
               Signed in as <b>{personLabel}</b>
               {companyLabel ? (

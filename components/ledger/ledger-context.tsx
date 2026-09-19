@@ -23,6 +23,10 @@ type LedgerContextValue = {
   ledger: Ledger;
   actingActorId: string;
   sessionRole: SessionRole;
+  userName: string;
+  companyName: string;
+  /** Login name for the acting profile (dashboard / self labels). */
+  actingDisplayName: string;
   selectedLotId: string | null;
   setSelectedLotId: (id: string | null) => void;
   preferredTraceLotId: string | null;
@@ -105,11 +109,21 @@ export function LedgerProvider({
     toastTimer.current = setTimeout(() => setToastVisible(false), 3400);
   }, []);
 
+  const actingDisplayName = useMemo(() => {
+    const login = userName.trim();
+    if (login) return login;
+    const actor = boot.ledger.actors.get(actingActorId);
+    return actor?.displayName ?? "You";
+  }, [userName, boot.ledger, actingActorId, version]);
+
   const value = useMemo<LedgerContextValue>(
     () => ({
       ledger: boot.ledger,
       actingActorId,
       sessionRole,
+      userName,
+      companyName,
+      actingDisplayName,
       selectedLotId,
       setSelectedLotId,
       preferredTraceLotId: boot.preferredTraceLotId,
@@ -126,6 +140,9 @@ export function LedgerProvider({
       boot.preferredTraceLotId,
       actingActorId,
       sessionRole,
+      userName,
+      companyName,
+      actingDisplayName,
       selectedLotId,
       refresh,
       version,
