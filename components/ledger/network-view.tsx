@@ -25,9 +25,16 @@ export function NetworkView() {
   const sections = useMemo(() => {
     if (!root) return [] as Actor[];
     if (sessionRole === "exporter") {
-      return sponsoredBy(ledger, actingActorId).filter((a) => a.actorType === "akrabi");
+      return sponsoredBy(ledger, actingActorId)
+        .filter((a) => a.actorType === "akrabi")
+        .sort((a, b) => a.legalIdentityRef.localeCompare(b.legalIdentityRef));
     }
     if (sessionRole === "akrabi") {
+      return sponsoredBy(ledger, actingActorId)
+        .filter((a) => a.actorType === "collector")
+        .sort((a, b) => a.legalIdentityRef.localeCompare(b.legalIdentityRef));
+    }
+    if (sessionRole === "collector") {
       return [root];
     }
     return [];
@@ -37,9 +44,11 @@ export function NetworkView() {
   const helper =
     sessionRole === "farmer"
       ? "Your farm profile."
-      : sessionRole === "akrabi"
-        ? "Farmers and processing sites you sponsored (shown as Farmer 1, Farmer 2…)."
-        : "Aggregators in your network (Aggregator 1…) and their farms (Farmer 1…).";
+      : sessionRole === "collector"
+        ? "Farmers you collect from (Farmer 1, Farmer 2…)."
+        : sessionRole === "akrabi"
+          ? "Collectors you sponsored (Collector 1…). Farmers only through collectors."
+          : "Aggregators in your network (Aggregator 1…) and their collectors.";
 
   function toggleSection(id: string) {
     setExpanded((prev) => {
@@ -58,14 +67,31 @@ export function NetworkView() {
     setExpanded(new Set());
   }
 
-  function sectionChildren(akrabiId: string): Actor[] {
-    const children = sponsoredBy(ledger, akrabiId);
-    const stations = children.filter(
-      (c) => c.actorType === "washing_station" || c.actorType === "mill",
-    );
+  function sectionChildren(sectionId: string): Actor[] {
+    const children = sponsoredBy(ledger, sectionId);
+    if (sessionRole === "exporter") {
+      // Aggregator section: collectors + processing sites (no direct farmers).
+      const collectors = children
+        .filter((c) => c.actorType === "collector")
+        .sort((a, b) => a.legalIdentityRef.localeCompare(b.legalIdentityRef));
+      const stations = children.filter(
+        (c) => c.actorType === "washing_station" || c.actorType === "mill",
+      );
+      return [...collectors, ...stations];
+    }
+    if (sessionRole === "akrabi") {
+      // Collector section: farmers under that collector.
+      return children
+        .filter((c) => c.actorType === "farmer")
+        .sort((a, b) => a.legalIdentityRef.localeCompare(b.legalIdentityRef));
+    }
+    // Collector viewing self: farmers + any sites (none expected).
     const farmers = children
       .filter((c) => c.actorType === "farmer")
       .sort((a, b) => a.legalIdentityRef.localeCompare(b.legalIdentityRef));
+    const stations = children.filter(
+      (c) => c.actorType === "washing_station" || c.actorType === "mill",
+    );
     return [...stations, ...farmers];
   }
 
@@ -104,22 +130,34 @@ export function NetworkView() {
               Collapse all
             </button>
           </div>
-          {sections.map((akrabi) => {
-            const children = sectionChildren(akrabi.actorId);
-            const allChildren = sponsoredBy(ledger, akrabi.actorId);
+          {sections.map((section) => {
+            const children = sectionChildren(section.actorId);
+            const allChildren = sponsoredBy(ledger, section.actorId);
+            const collectorsUnder = allChildren.filter((c) => c.actorType === "collector");
             const farmers = allChildren.filter((c) => c.actorType === "farmer");
+            // For exporter aggregator sections, count farms via collectors.
+            const farmsViaCollectors =
+              sessionRole === "exporter"
+                ? collectorsUnder.reduce(
+                    (n, col) =>
+                      n +
+                      sponsoredBy(ledger, col.actorId).filter((a) => a.actorType === "farmer")
+                        .length,
+                    0,
+                  )
+                : farmers.length;
             const stations = allChildren.filter(
               (c) => c.actorType === "washing_station" || c.actorType === "mill",
             );
-            const open = expanded.has(akrabi.actorId);
-            const meta = akrabi.metadata || {};
+            const open = expanded.has(section.actorId);
+            const meta = section.metadata || {};
             const loc = [meta.woreda, meta.zone].filter(Boolean).join(", ");
 
             return (
-              <div className="net-section" key={akrabi.actorId}>
+              <div className="net-section" key={section.actorId}>
                 <div
                   className="net-head"
-                  onClick={() => toggleSection(akrabi.actorId)}
+                  onClick={() => toggleSection(section.actorId)}
                   role="button"
                   tabIndex={0}
                 >
@@ -129,17 +167,17 @@ export function NetworkView() {
                       className="net-head-title"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setProfileId(akrabi.actorId);
+                        setProfileId(section.actorId);
                       }}
                     >
                       <b>
-                        {akrabi.actorId === actingActorId
+                        {section.actorId === actingActorId
                           ? actingDisplayName
-                          : displayActorName(ledger, akrabi.actorId, sessionRole)}
+                          : displayActorName(ledger, section.actorId, sessionRole)}
                       </b>
                     </div>
                     <div className="net-head-sub">
-                      {sessionRole === "exporter" ? null : loc ? (
+                      {sessionRole === "exporter" || sessionRole === "akrabi" ? null : loc ? (
                         <>
                           {loc}
                           {" · "}
@@ -147,15 +185,23 @@ export function NetworkView() {
                       ) : null}
                       {sessionRole === "exporter" ? (
                         <>
+                          <b>{collectorsUnder.length}</b> collector
+                          {collectorsUnder.length !== 1 ? "s" : ""}
+                          {" · "}
                           <b>{stations.length}</b> processing site
                           {stations.length !== 1 ? "s" : ""}
-                          {farmers.length > 0 ? (
+                          {farmsViaCollectors > 0 ? (
                             <>
                               {" "}
-                              · <b>{farmers.length}</b> farm
-                              {farmers.length !== 1 ? "s" : ""}
+                              · <b>{farmsViaCollectors}</b> farm
+                              {farmsViaCollectors !== 1 ? "s" : ""}
                             </>
                           ) : null}
+                        </>
+                      ) : sessionRole === "akrabi" ? (
+                        <>
+                          <b>{farmers.length}</b> farmer
+                          {farmers.length !== 1 ? "s" : ""}
                         </>
                       ) : (
                         <>
@@ -179,7 +225,9 @@ export function NetworkView() {
                       key={c.actorId}
                       actor={c}
                       label={
-                        c.actorType === "farmer" || c.actorType === "akrabi"
+                        c.actorType === "farmer" ||
+                        c.actorType === "collector" ||
+                        c.actorType === "akrabi"
                           ? displayActorName(ledger, c.actorId, sessionRole)
                           : undefined
                       }
@@ -270,24 +318,35 @@ function ActorProfileModal({
   const sponsor = actor.sponsorActorId ? ledger.actors.get(actor.sponsorActorId) : null;
   const children = allowChildren
     ? sponsoredBy(ledger, actorId)
-        .filter((c) =>
-          sessionRole === "akrabi"
-            ? c.actorType === "farmer" ||
+        .filter((c) => {
+          if (sessionRole === "collector") {
+            return c.actorType === "farmer";
+          }
+          if (sessionRole === "akrabi") {
+            return (
+              c.actorType === "farmer" ||
+              c.actorType === "collector" ||
               c.actorType === "washing_station" ||
               c.actorType === "mill"
-            : sessionRole === "exporter"
-              ? c.actorType === "farmer" ||
-                c.actorType === "washing_station" ||
-                c.actorType === "mill"
-              : true,
-        )
+            );
+          }
+          if (sessionRole === "exporter") {
+            return (
+              c.actorType === "collector" ||
+              c.actorType === "washing_station" ||
+              c.actorType === "mill"
+            );
+          }
+          return true;
+        })
         .sort((a, b) => a.legalIdentityRef.localeCompare(b.legalIdentityRef))
     : [];
 
   const metaRows =
-    sessionRole === "exporter" || sessionRole === "akrabi"
-      ? // Keep operational fields; drop personal contact-style names from farmer cards.
-        fields.filter(([key]) => meta[key] && key !== "phone" && key !== "contactPerson")
+    sessionRole === "exporter" ||
+    sessionRole === "akrabi" ||
+    sessionRole === "collector"
+      ? fields.filter(([key]) => meta[key] && key !== "phone" && key !== "contactPerson")
       : fields.filter(([key]) => meta[key]);
   const titleName =
     actorId === actingActorId
@@ -297,6 +356,14 @@ function ActorProfileModal({
   return (
     <div className="modal-overlay show" role="dialog" aria-modal="true">
       <div className="modal modal-wide">
+        <button
+          type="button"
+          className="modal-close"
+          aria-label="Close"
+          onClick={onClose}
+        >
+          ×
+        </button>
         <span className="net-card-type">{actorTypeLabel(actor.actorType)}</span>
         <h3 style={{ margin: "8px 0 2px" }}>
           <b>{titleName}</b>
@@ -340,7 +407,9 @@ function ActorProfileModal({
                   style={{ cursor: "pointer", textDecoration: "underline" }}
                   onClick={() => onOpenActor(c.actorId)}
                 >
-                  {c.actorType === "farmer" || c.actorType === "akrabi"
+                  {c.actorType === "farmer" ||
+                  c.actorType === "collector" ||
+                  c.actorType === "akrabi"
                     ? displayActorName(ledger, c.actorId, sessionRole)
                     : c.displayName}
                 </span>

@@ -80,9 +80,11 @@ export function WorkspaceView() {
   const onboardLabel =
     sessionRole === "exporter" && allowedOnboard.includes("akrabi")
       ? "+ Add new aggregator"
-      : sessionRole === "akrabi" && allowedOnboard.includes("farmer")
-        ? "+ Add new farmer"
-        : null;
+      : sessionRole === "akrabi" && allowedOnboard.includes("collector")
+        ? "+ Add new collector"
+        : sessionRole === "collector" && allowedOnboard.includes("farmer")
+          ? "+ Add new farmer"
+          : null;
   const incoming = useMemo(
     () =>
       [...ledger.movements.values()].filter(
@@ -685,9 +687,11 @@ function AddLotForm({
             <label htmlFor="al-supplier">Supplier</label>
             {suppliers.length === 0 ? (
               <p className="warn-note" style={{ margin: 0 }}>
-                {sessionRole === "akrabi"
+                {sessionRole === "collector"
                   ? "Onboard a farmer first, then add a lot from them."
-                  : "Onboard an aggregator first, then add a lot from them."}
+                  : sessionRole === "akrabi"
+                    ? "Onboard a collector first, then add a lot from them."
+                    : "Onboard an aggregator first, then add a lot from them."}
               </p>
             ) : (
               <select
@@ -1446,7 +1450,8 @@ function TransferForm({
           if (a.actorId === lot.ownerActorId) return false;
           const self = ledger.actors.get(lot.custodianActorId);
           if (!self) return false;
-          if (self.actorType === "farmer") return a.actorType === "akrabi";
+          if (self.actorType === "farmer") return a.actorType === "collector";
+          if (self.actorType === "collector") return a.actorType === "akrabi";
           if (self.actorType === "akrabi") return a.actorType === "exporter";
           if (self.actorType === "exporter") return a.actorType === "akrabi";
           return false;

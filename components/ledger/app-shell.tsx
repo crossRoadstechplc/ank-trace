@@ -219,6 +219,14 @@ function OnboardModal({
   return (
     <div className="modal-overlay show" role="dialog" aria-modal="true">
       <div className="modal modal-wide">
+        <button
+          type="button"
+          className="modal-close"
+          aria-label="Close"
+          onClick={onClose}
+        >
+          ×
+        </button>
         {allowed.length === 0 ? (
           <>
             <h3>Onboarding not available</h3>
@@ -242,8 +250,10 @@ function OnboardModal({
             </h3>
             <p className="helper-note">
               {isAddAkrabi
-                ? "Adds the aggregator and their processing site. Farmers are added later."
-                : `Added by ${actor?.displayName}.`}
+                ? "Adds the aggregator and their processing site. Collectors are added later."
+                : actorType === "collector"
+                  ? "Adds a collector under your network. Farmers are added by the collector."
+                  : `Added by ${actor?.displayName}.`}
             </p>
             {allowed.length > 1 && (
               <div className="field">

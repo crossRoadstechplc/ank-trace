@@ -174,9 +174,8 @@ export class Ledger {
   }
 
   /**
-   * Record an intake lot for an aggregator/exporter: creates farmer origin,
-   * moves through the immediate supplier, then into receiver custody with ownership.
-   * Lineage and movements both point back to the supplier before.
+   * Record an intake lot: creates farmer origin, moves through the supplier chain,
+   * then into receiver custody with ownership. Lineage points back through supplier.
    */
   createIntakeLot({
     supplierActorId,
@@ -200,13 +199,18 @@ export class Ledger {
       throw new InvariantViolation("INV-07", "Intake mass must be positive.");
     }
 
+    const findFarmerUnder = (sponsorId: string): Actor | undefined =>
+      [...this.actors.values()].find(
+        (a) => a.actorType === "farmer" && a.sponsorActorId === sponsorId,
+      );
+
     let farmerActorId: string;
+    let viaCollectorId: string | null = null;
+
     if (supplier.actorType === "farmer") {
       farmerActorId = supplier.actorId;
-    } else if (supplier.actorType === "akrabi") {
-      const farm = [...this.actors.values()].find(
-        (a) => a.actorType === "farmer" && a.sponsorActorId === supplier.actorId,
-      );
+    } else if (supplier.actorType === "collector") {
+      const farm = findFarmerUnder(supplier.actorId);
       if (!farm) {
         throw new InvariantViolation(
           "INV-10",
@@ -214,10 +218,30 @@ export class Ledger {
         );
       }
       farmerActorId = farm.actorId;
+      viaCollectorId = supplier.actorId;
+    } else if (supplier.actorType === "akrabi") {
+      const collector = [...this.actors.values()].find(
+        (a) => a.actorType === "collector" && a.sponsorActorId === supplier.actorId,
+      );
+      if (!collector) {
+        throw new InvariantViolation(
+          "INV-10",
+          `${supplier.displayName} has no collectors to attribute origin through.`,
+        );
+      }
+      const farm = findFarmerUnder(collector.actorId);
+      if (!farm) {
+        throw new InvariantViolation(
+          "INV-10",
+          `${collector.displayName} has no farmers to attribute origin to.`,
+        );
+      }
+      farmerActorId = farm.actorId;
+      viaCollectorId = collector.actorId;
     } else {
       throw new InvariantViolation(
         "INV-10",
-        `Intake supplier must be a farmer or aggregator (got ${supplier.actorType}).`,
+        `Intake supplier must be a farmer, collector, or aggregator (got ${supplier.actorType}).`,
       );
     }
 
@@ -248,13 +272,19 @@ export class Ledger {
       });
     };
 
-    // Farmer → aggregator (when supplier is akrabi), then supplier → receiver.
-    if (supplier.actorType === "akrabi" && farmerActorId !== supplier.actorId) {
-      hop(
-        farmerActorId,
-        supplier.actorId,
-        `${supplier.displayName} store`,
-      );
+    // Farmer → collector (when present).
+    if (viaCollectorId && origin.custodianActorId === farmerActorId) {
+      const collector = this.actors.get(viaCollectorId)!;
+      hop(farmerActorId, viaCollectorId, `${collector.displayName} collection point`);
+    }
+
+    // Collector → aggregator (when supplier is akrabi).
+    if (
+      supplier.actorType === "akrabi" &&
+      viaCollectorId &&
+      origin.custodianActorId === viaCollectorId
+    ) {
+      hop(viaCollectorId, supplier.actorId, `${supplier.displayName} store`);
     }
 
     if (origin.custodianActorId !== receiverActorId) {

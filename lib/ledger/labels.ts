@@ -24,7 +24,8 @@ export const REASON_LABELS: Record<TerminalReason, string> = {
 
 export const ACTOR_TYPE_LABELS: Record<ActorType, string> = {
   farmer: "Farmer",
-  akrabi: "Akrabi",
+  collector: "Collector",
+  akrabi: "Aggregator",
   washing_station: "Washing station",
   mill: "Mill",
   exporter: "Exporter",
@@ -35,7 +36,8 @@ export const ACTOR_TYPE_LABELS: Record<ActorType, string> = {
 /** Who can onboard whom. */
 export const ONBOARD_RULES: Partial<Record<ActorType, ActorType[]>> = {
   exporter: ["akrabi"],
-  akrabi: ["farmer"],
+  akrabi: ["collector"],
+  collector: ["farmer"],
 };
 
 /** Metadata fields: [key, label, placeholder]. */
@@ -51,6 +53,15 @@ export const METADATA_FIELDS: Partial<Record<ActorType, MetadataField[]>> = {
     ["farmSizeHa", "Farm size (ha)", ""],
     ["variety", "Primary variety", "Heirloom"],
     ["yearsFarming", "Years farming", ""],
+  ],
+  collector: [
+    ["region", "Region", "Sidama"],
+    ["zone", "Zone", ""],
+    ["woreda", "Woreda", ""],
+    ["kebele", "Kebele", ""],
+    ["phone", "Phone", ""],
+    ["coverageArea", "Coverage area", ""],
+    ["yearsCollecting", "Years collecting", ""],
   ],
   akrabi: [
     ["region", "Region", "Sidama"],

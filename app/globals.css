@@ -342,12 +342,21 @@
     align-items:center; justify-content:center; z-index:50;
   }
   .modal-overlay.show{ display:flex; }
-  .modal{ background:var(--panel); border:1px solid var(--ink); padding:24px; width:min(360px, calc(100vw - 24px)); max-height:88vh; overflow-y:auto; }
+  .modal{ background:var(--panel); border:1px solid var(--ink); padding:24px; width:min(360px, calc(100vw - 24px)); max-height:88vh; overflow-y:auto; position:relative; }
   .modal.modal-wide{ width:min(520px, calc(100vw - 24px)); }
   .modal .field{ max-width:none; }
   .modal-overlay{ align-items:flex-start; padding-top:5vh; }
   .modal h3{ font-family:var(--font); margin:0 0 16px; font-size:17px; }
   .modal .btn-row{ display:flex; gap:8px; margin-top:16px; }
+  .modal-close{
+    position:sticky; top:0; float:right; z-index:2;
+    width:32px; height:32px; margin:-4px -8px 8px 12px;
+    display:inline-flex; align-items:center; justify-content:center;
+    border:1px solid var(--rule-strong); background:var(--panel);
+    color:var(--ink); font-size:20px; line-height:1; cursor:pointer;
+    font-family:var(--font); padding:0;
+  }
+  .modal-close:hover{ border-color:var(--ink); background:var(--paper-alt); }
 
   /* Inspector view */
   .tabs{ display:flex; gap:0; border-bottom:1px solid var(--ink); margin-bottom:20px; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:thin; }

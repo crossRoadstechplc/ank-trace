@@ -141,6 +141,14 @@ export function LeadsModal() {
   return (
     <div className="modal-overlay show" role="dialog" aria-modal="true">
       <div className="modal modal-wide leads-modal">
+        <button
+          type="button"
+          className="modal-close"
+          aria-label="Close"
+          onClick={() => void closePanel()}
+        >
+          ×
+        </button>
         {phase === "password" ? (
           <form onSubmit={unlock}>
             <h3>Admin access</h3>
@@ -180,9 +188,6 @@ export function LeadsModal() {
           <>
             <div className="leads-header">
               <h3>Leads ({leads.length})</h3>
-              <button type="button" className="secondary" onClick={() => void closePanel()}>
-                Close
-              </button>
             </div>
             <p className="helper-note">
             Login requests, counts, and timestamps.

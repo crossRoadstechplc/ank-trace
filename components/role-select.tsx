@@ -9,7 +9,7 @@ import {
   type SessionRole,
 } from "@/lib/role-session";
 
-const ROLES: SessionRole[] = ["farmer", "akrabi", "exporter"];
+const ROLES: SessionRole[] = ["farmer", "collector", "akrabi", "exporter"];
 
 type Step = "role" | "actor";
 
@@ -50,6 +50,7 @@ export function RoleSelect() {
 
   function candidateLabel(index: number): string {
     if (role === "farmer") return `Farmer ${index + 1}`;
+    if (role === "collector") return `Collector ${index + 1}`;
     if (role === "akrabi") return `Aggregator ${index + 1}`;
     return `Option ${index + 1}`;
   }

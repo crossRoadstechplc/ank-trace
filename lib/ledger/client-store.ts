@@ -1,6 +1,6 @@
 import { bootstrap, type BootstrapResult } from "./seed";
 
-const GLOBAL_KEY = "__ankuaru_ledger_boot_v5__";
+const GLOBAL_KEY = "__ankuaru_ledger_boot_v6__";
 
 type GlobalBoot = typeof globalThis & {
   [GLOBAL_KEY]?: BootstrapResult;

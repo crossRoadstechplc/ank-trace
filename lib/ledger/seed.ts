@@ -82,6 +82,7 @@ function moveReceive(
 export interface SeededNetwork {
   exporter: Actor;
   akrabis: Array<{ akrabi: Actor; site: AkrabiSite }>;
+  collectors: Array<{ collector: Actor; akrabi: Actor; site: AkrabiSite }>;
   stations: Array<{ station: Actor; site: AkrabiSite; isMill: boolean }>;
   allFarmers: Actor[];
   deliveries: Array<{
@@ -113,7 +114,9 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
   });
 
   let farmerSeq = 0;
+  let collectorSeq = 0;
   const akrabis: SeededNetwork["akrabis"] = [];
+  const collectors: SeededNetwork["collectors"] = [];
   const stations: SeededNetwork["stations"] = [];
   const allFarmers: Actor[] = [];
   const deliveries: SeededNetwork["deliveries"] = [];
@@ -239,7 +242,27 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
     );
     stations.push({ station, site, isMill });
 
-    // Many farms per aggregator — first three sites keep one demo-selectable farmer.
+    // One collector per aggregator site; first three are demo-selectable.
+    collectorSeq++;
+    const collector = ledger.onboardActor(
+      "collector",
+      `${site.place} Collector ${collectorSeq}`,
+      `REG-COL-${1000 + collectorSeq}`,
+      akrabi.actorId,
+      {
+        region: site.region,
+        zone: site.zone,
+        woreda: site.woreda,
+        kebele: `${site.place} Kebele 02`,
+        phone: `+251 9${(20000000 + collectorSeq * 41) % 90000000}`.slice(0, 13),
+        coverageArea: `${site.woreda} kebeles`,
+        yearsCollecting: String(2 + (si % 8)),
+        demoSelectable: si < 3 ? "true" : "false",
+      },
+    );
+    collectors.push({ collector, akrabi, site });
+
+    // Farmers sponsored by the collector (not the aggregator).
     const farmerCount = 6;
     const farmers: Actor[] = [];
     for (let f = 0; f < farmerCount; f++) {
@@ -250,7 +273,7 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
         "farmer",
         generateFarmerName(site, f + si * 7),
         `FAYDA-${String(2000 + farmerSeq).padStart(6, "0")}`,
-        akrabi.actorId,
+        collector.actorId,
         {
           region: site.region,
           zone: site.zone,
@@ -273,7 +296,33 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
     // Role pick still offers three aggregators; the rest feed the exporter network only.
     akrabi.metadata.demoSelectable = si < 3 ? "true" : "false";
 
-    // Historical FOB cycle: all farms at this site → green → exporter → FOB.
+    function deliverFarmerToAkrabi(
+      farmer: Actor,
+      lotId: string,
+      kg: number,
+      recvKg: number,
+    ): void {
+      moveReceive(
+        ledger,
+        lotId,
+        farmer.actorId,
+        collector.actorId,
+        kg,
+        recvKg,
+        `${collector.displayName} collection point, ${site.place}`,
+      );
+      moveReceive(
+        ledger,
+        lotId,
+        collector.actorId,
+        akrabi.actorId,
+        recvKg,
+        recvKg,
+        `${akrabiName} store, ${site.place}`,
+      );
+    }
+
+    // Historical FOB cycle: all farms → collector → aggregator → green → FOB.
     {
       const route: ProcessingRoute =
         site.route === "mixed"
@@ -294,15 +343,7 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
           cropYear: "2025-2026",
         });
         const recvKg = k % 5 === 0 ? kg - 2 : kg;
-        moveReceive(
-          ledger,
-          lot.lotId,
-          farmer.actorId,
-          akrabi.actorId,
-          kg,
-          recvKg,
-          `${akrabiName} store, ${site.place}`,
-        );
+        deliverFarmerToAkrabi(farmer, lot.lotId, kg, recvKg);
         return lot;
       });
       const cherryIn = origins.reduce((s, l) => s + l.canonicalMassKg, 0);
@@ -331,7 +372,7 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
       deliveries.push({ akrabi, station, finalLot, route, cherryIn });
     }
 
-    // Open cycle: leave aggregated cherry with akrabi (demo inventory for first sites).
+    // Open cycle: leave aggregated cherry with collector (demo inventory).
     {
       const route: ProcessingRoute =
         site.route === "natural" ? "natural" : "washed";
@@ -352,18 +393,18 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
           ledger,
           lot.lotId,
           farmer.actorId,
-          akrabi.actorId,
+          collector.actorId,
           kg,
           kg,
-          `${akrabiName} store, ${site.place}`,
+          `${collector.displayName} collection point, ${site.place}`,
         );
         return lot;
       });
       const cherryIn = origins.reduce((s, l) => s + l.canonicalMassKg, 0);
       const combined = ledger.aggregate({
         parentLotIds: origins.map((l) => l.lotId),
-        executingPersonId: akrabi.actorId,
-        actingActorId: akrabi.actorId,
+        executingPersonId: collector.actorId,
+        actingActorId: collector.actorId,
       });
       deliveries.push({ akrabi, station, finalLot: combined, route, cherryIn });
     }
@@ -384,15 +425,7 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
           locationId: `${site.place}, ${site.woreda}`,
           cropYear: "2025-2026",
         });
-        moveReceive(
-          ledger,
-          lot.lotId,
-          farmer.actorId,
-          akrabi.actorId,
-          kg,
-          kg,
-          `${akrabiName} store, ${site.place}`,
-        );
+        deliverFarmerToAkrabi(farmer, lot.lotId, kg, kg);
         return lot;
       });
       const cherryIn = origins.reduce((s, l) => s + l.canonicalMassKg, 0);
@@ -455,7 +488,6 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
   // Prefer the washed multi-aggregator blend for lineage trace (most farms).
   if (blendLots.length) {
     const preferred = blendLots.find((l) => l.processingRoute === "washed") ?? blendLots[0];
-    // Move preferred blend to end so bootstrap picks it as preferredTraceLotId.
     const idx = deliveries.findIndex((d) => d.finalLot.lotId === preferred.lotId);
     if (idx >= 0) {
       const [row] = deliveries.splice(idx, 1);
@@ -463,7 +495,7 @@ export function seedNetwork(ledger: Ledger): SeededNetwork {
     }
   }
 
-  return { exporter, akrabis, stations, allFarmers, deliveries };
+  return { exporter, akrabis, collectors, stations, allFarmers, deliveries };
 }
 
 export interface LotCodeHelpers {

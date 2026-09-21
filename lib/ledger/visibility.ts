@@ -8,7 +8,12 @@ export function actorsOfType(ledger: Ledger, type: ActorType): Actor[] {
     .filter((a) => a.actorType === type)
     .filter((a) => {
       // Role pick / demo lists: only seeded "good" actors with demoSelectable
-      if (type === "farmer" || type === "akrabi" || type === "exporter") {
+      if (
+        type === "farmer" ||
+        type === "collector" ||
+        type === "akrabi" ||
+        type === "exporter"
+      ) {
         return a.metadata?.demoSelectable === "true";
       }
       return true;
@@ -24,8 +29,11 @@ export function networkVisibleActors(ledger: Ledger, actingActorId: string): Act
   if (self.actorType === "farmer") {
     return [self];
   }
-  if (self.actorType === "akrabi") {
+  if (self.actorType === "collector") {
     return sponsoredBy(ledger, actingActorId).filter((a) => a.actorType === "farmer");
+  }
+  if (self.actorType === "akrabi") {
+    return sponsoredBy(ledger, actingActorId).filter((a) => a.actorType === "collector");
   }
   if (self.actorType === "exporter") {
     return sponsoredBy(ledger, actingActorId).filter((a) => a.actorType === "akrabi");
@@ -43,18 +51,22 @@ export function allowedSendTargets(ledger: Ledger, actingActorId: string): Actor
     const sponsor = ledger.actors.get(self.sponsorActorId);
     return sponsor ? [sponsor] : [];
   }
+  if (self.actorType === "collector") {
+    if (!self.sponsorActorId) return [];
+    const sponsor = ledger.actors.get(self.sponsorActorId);
+    return sponsor ? [sponsor] : [];
+  }
   if (self.actorType === "akrabi") {
     return [...ledger.actors.values()].filter((a) => a.actorType === "exporter");
   }
   if (self.actorType === "exporter") {
-    // Exporter may send within network of sponsored akrabis only (no farmers).
     return sponsoredBy(ledger, actingActorId).filter((a) => a.actorType === "akrabi");
   }
   return [];
 }
 
 export function canShowFarmerIdentity(role: SessionRole | null): boolean {
-  return role === "farmer" || role === "akrabi";
+  return role === "farmer" || role === "collector";
 }
 
 /** Who the acting actor may record an intake lot from. */
@@ -62,9 +74,14 @@ export function allowedIntakeSuppliers(ledger: Ledger, actingActorId: string): A
   const self = ledger.actors.get(actingActorId);
   if (!self) return [];
 
-  if (self.actorType === "akrabi") {
+  if (self.actorType === "collector") {
     return sponsoredBy(ledger, actingActorId)
       .filter((a) => a.actorType === "farmer")
+      .sort((a, b) => a.legalIdentityRef.localeCompare(b.legalIdentityRef));
+  }
+  if (self.actorType === "akrabi") {
+    return sponsoredBy(ledger, actingActorId)
+      .filter((a) => a.actorType === "collector")
       .sort((a, b) => a.legalIdentityRef.localeCompare(b.legalIdentityRef));
   }
   if (self.actorType === "exporter") {
@@ -88,24 +105,32 @@ export function immediateSupplierOf(ledger: Ledger, lotId: string): Actor | null
 export function primaryWorkspaceAction(
   role: SessionRole | null,
 ): "newLot" | "addFarmer" | "addAkrabi" | null {
-  // Every role can add a lot from the workspace; onboard CTAs stay in the toolbar.
-  if (role === "farmer" || role === "akrabi" || role === "exporter") return "newLot";
+  if (
+    role === "farmer" ||
+    role === "collector" ||
+    role === "akrabi" ||
+    role === "exporter"
+  ) {
+    return "newLot";
+  }
   return null;
 }
 
 export function dashboardKicker(role: SessionRole | null): string {
   if (role === "farmer") return "Farmer Dashboard";
+  if (role === "collector") return "Collector Dashboard";
   if (role === "akrabi") return "Aggregator Dashboard";
   if (role === "exporter") return "Exporter Dashboard";
   return "Ledger Workspace";
 }
 
-/** Stable peer list for Farmer N / Aggregator N labels. */
-function numberedPeers(
-  ledger: Ledger,
-  actor: Actor,
-): Actor[] {
-  if (actor.actorType === "farmer" || actor.actorType === "akrabi") {
+/** Stable peer list for Farmer N / Collector N / Aggregator N labels. */
+function numberedPeers(ledger: Ledger, actor: Actor): Actor[] {
+  if (
+    actor.actorType === "farmer" ||
+    actor.actorType === "collector" ||
+    actor.actorType === "akrabi"
+  ) {
     return [...ledger.actors.values()]
       .filter(
         (a) =>
@@ -118,14 +143,18 @@ function numberedPeers(
 }
 
 function numberedLabel(actor: Actor, peers: Actor[]): string {
-  const prefix = actor.actorType === "akrabi" ? "Aggregator" : "Farmer";
+  const prefix =
+    actor.actorType === "akrabi"
+      ? "Aggregator"
+      : actor.actorType === "collector"
+        ? "Collector"
+        : "Farmer";
   const idx = peers.findIndex((a) => a.actorId === actor.actorId);
   return idx >= 0 ? `${prefix} ${idx + 1}` : prefix;
 }
 
 /**
- * Display name for UI. On aggregator/exporter views, farmers and aggregators
- * are shown as Farmer N / Aggregator N instead of personal or place names.
+ * Display name for UI. Mid/downstream roles see Farmer N / Collector N / Aggregator N.
  */
 export function displayActorName(
   ledger: Ledger,
@@ -135,8 +164,14 @@ export function displayActorName(
   const actor = ledger.actors.get(actorId);
   if (!actor) return actorId;
 
-  const useNumbers = role === "exporter" || role === "akrabi";
-  if (useNumbers && (actor.actorType === "farmer" || actor.actorType === "akrabi")) {
+  const useNumbers =
+    role === "exporter" || role === "akrabi" || role === "collector";
+  if (
+    useNumbers &&
+    (actor.actorType === "farmer" ||
+      actor.actorType === "collector" ||
+      actor.actorType === "akrabi")
+  ) {
     return numberedLabel(actor, numberedPeers(ledger, actor));
   }
 

@@ -1,6 +1,7 @@
 /** Actor roles in the coffee supply network. */
 export type ActorType =
   | "farmer"
+  | "collector"
   | "akrabi"
   | "washing_station"
   | "mill"

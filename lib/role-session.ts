@@ -1,6 +1,6 @@
 /** Session-only role binding (not persisted to Postgres). */
 
-export type SessionRole = "farmer" | "akrabi" | "exporter";
+export type SessionRole = "farmer" | "collector" | "akrabi" | "exporter";
 
 export type RoleSession = {
   role: SessionRole;
@@ -12,9 +12,12 @@ export const ROLE_SESSION_KEY = "ank_role";
 
 export const SESSION_ROLE_LABELS: Record<SessionRole, string> = {
   farmer: "Farmer",
+  collector: "Collector",
   akrabi: "Aggregator",
   exporter: "Exporter",
 };
+
+const VALID_ROLES: SessionRole[] = ["farmer", "collector", "akrabi", "exporter"];
 
 export function getRoleSession(): RoleSession | null {
   if (typeof window === "undefined") return null;
@@ -22,10 +25,7 @@ export function getRoleSession(): RoleSession | null {
     const raw = sessionStorage.getItem(ROLE_SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as RoleSession & { actorId?: string };
-    if (
-      !parsed ||
-      (parsed.role !== "farmer" && parsed.role !== "akrabi" && parsed.role !== "exporter")
-    ) {
+    if (!parsed || !VALID_ROLES.includes(parsed.role)) {
       return null;
     }
     // Migrate legacy { role, actorId } by treating as invalid — force re-pick
