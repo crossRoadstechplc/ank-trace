@@ -500,15 +500,12 @@ function TraceMorePanel({
 
   if (ev?.eventType === "aggregate") {
     rows.push({ k: "Combined from", v: <b>{parents.length} lots</b> });
-    const prov =
-      sessionRole === "exporter"
-        ? `${Object.keys(lot.provenance).length} identities protected`
-        : Object.entries(lot.provenance)
-            .map(
-              ([id, p]) =>
-                `${displayActorName(ledger, id, sessionRole)} ${(p * 100).toFixed(1)}%`,
-            )
-            .join(" · ");
+    const prov = Object.entries(lot.provenance)
+      .map(
+        ([id, p]) =>
+          `${displayActorName(ledger, id, sessionRole)} ${(p * 100).toFixed(1)}%`,
+      )
+      .join(" · ");
     rows.push({ k: "Provenance", v: prov });
   }
 

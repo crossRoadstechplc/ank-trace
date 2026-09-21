@@ -7,8 +7,10 @@ import {
   REASON_LABELS,
   actorLabel,
   allowedSendTargets,
+  allowedIntakeSuppliers,
   displayActorName,
   fmtKg,
+  immediateSupplierOf,
   primaryWorkspaceAction,
   routeLabel,
   stateLabel,
@@ -100,13 +102,6 @@ export function WorkspaceView() {
     requestAnimationFrame(() => scrollDetailIntoView(detailRef.current));
   }
 
-  function openAddAkrabi() {
-    setSelectedLotId(null);
-    setMovementId(null);
-    setAction("addAkrabi");
-    requestAnimationFrame(() => scrollDetailIntoView(detailRef.current));
-  }
-
   function openConfirm(mid: string) {
     setSelectedLotId(null);
     setMovementId(mid);
@@ -136,17 +131,7 @@ export function WorkspaceView() {
       <div className="primary-action">
         {primary === "newLot" && (
           <button type="button" onClick={openNewLot}>
-            + Start a new lot from harvest
-          </button>
-        )}
-        {primary === "addFarmer" && (
-          <p className="helper-note" style={{ margin: 0 }}>
-            Use <b>+ Add new farmer</b> in the toolbar to add farmers.
-          </p>
-        )}
-        {primary === "addAkrabi" && (
-          <button type="button" onClick={openAddAkrabi}>
-            + Add new akrabi
+            + Add a lot
           </button>
         )}
       </div>
@@ -227,9 +212,10 @@ export function WorkspaceView() {
 
       <div ref={detailRef} id="detailPanelWrap">
         {action === "newLot" && (
-          <NewLotForm
+          <AddLotForm
             onCancel={cancelAction}
             actingActorId={actingActorId}
+            sessionRole={sessionRole}
             ledger={ledger}
             lotCode={lotCode}
             refresh={refresh}
@@ -344,6 +330,16 @@ function LotDetail({
           <div className="fact-label">Custodian</div>
           <div className="fact-value">
             {displayActorName(ledger, lot.custodianActorId, sessionRole)}
+          </div>
+        </div>
+        <div>
+          <div className="fact-label">Supplied by</div>
+          <div className="fact-value">
+            {(() => {
+              const supplier = immediateSupplierOf(ledger, lot.lotId);
+              if (!supplier) return "Harvest origin (no prior supplier)";
+              return displayActorName(ledger, supplier.actorId, sessionRole);
+            })()}
           </div>
         </div>
         <div>
@@ -570,9 +566,10 @@ function AddAkrabiForm({
   );
 }
 
-function NewLotForm({
+function AddLotForm({
   onCancel,
   actingActorId,
+  sessionRole,
   ledger,
   lotCode,
   refresh,
@@ -582,6 +579,7 @@ function NewLotForm({
 }: {
   onCancel: () => void;
   actingActorId: string;
+  sessionRole: SessionRole;
   ledger: ReturnType<typeof useLedger>["ledger"];
   lotCode: (id: string) => string;
   refresh: () => void;
@@ -589,33 +587,65 @@ function NewLotForm({
   setSelectedLotId: (id: string | null) => void;
   setAction: (a: Action) => void;
 }) {
-  const actors = [...ledger.actors.values()];
-  const [farmerId, setFarmerId] = useState(
-    actors.find((a) => a.actorType === "farmer")?.actorId ?? actors[0]?.actorId ?? "",
+  const isFarmer = sessionRole === "farmer";
+  const suppliers = useMemo(
+    () => allowedIntakeSuppliers(ledger, actingActorId),
+    [ledger, actingActorId],
   );
-  const [massKg, setMassKg] = useState("500");
-  const [processingState, setProcessingState] = useState<ProcessingState>("cherry");
+
+  const defaultState: ProcessingState =
+    sessionRole === "exporter" ? "green_washed" : "cherry";
+
+  const [supplierId, setSupplierId] = useState(suppliers[0]?.actorId ?? "");
+  const [massKg, setMassKg] = useState(sessionRole === "exporter" ? "1200" : "500");
+  const [processingState, setProcessingState] = useState<ProcessingState>(defaultState);
   const [processingRoute, setProcessingRoute] = useState<ProcessingRoute>("washed");
   const [cropYear, setCropYear] = useState("2025-2026");
+  const [locationId, setLocationId] = useState(
+    isFarmer ? "field entry" : "intake warehouse",
+  );
 
   function submit(e: FormEvent) {
     e.preventDefault();
     try {
-      const lot = ledger.createOriginLot({
-        farmerActorId: farmerId,
-        recordedByActorId: actingActorId,
+      if (isFarmer) {
+        const lot = ledger.createOriginLot({
+          farmerActorId: actingActorId,
+          recordedByActorId: actingActorId,
+          executingPersonId: actingActorId,
+          massKg: parseFloat(massKg),
+          processingState,
+          processingRoute,
+          locationId: locationId.trim() || "field entry",
+          cropYear: cropYear.trim(),
+        });
+        setAction(null);
+        setSelectedLotId(lot.lotId);
+        refresh();
+        toast(
+          `${lotCode(lot.lotId)} created: ${lot.canonicalMassKg}kg ${stateLabel(lot.processingState)}.`,
+        );
+        return;
+      }
+
+      if (!supplierId) {
+        throw new Error("Select the supplier this lot came from.");
+      }
+      const lot = ledger.createIntakeLot({
+        supplierActorId: supplierId,
+        receiverActorId: actingActorId,
         executingPersonId: actingActorId,
         massKg: parseFloat(massKg),
         processingState,
         processingRoute,
-        locationId: "field entry",
+        locationId: locationId.trim() || "intake warehouse",
         cropYear: cropYear.trim(),
       });
       setAction(null);
-      setSelectedLotId(null);
+      setSelectedLotId(lot.lotId);
       refresh();
       toast(
-        `${lotCode(lot.lotId)} created: ${lot.canonicalMassKg}kg ${stateLabel(lot.processingState)}.`,
+        `${lotCode(lot.lotId)} intake recorded from ${displayActorName(ledger, supplierId, sessionRole)}: ${lot.canonicalMassKg}kg.`,
       );
     } catch (err) {
       catchInv(err, toast);
@@ -628,68 +658,109 @@ function NewLotForm({
         ← cancel
       </span>
       <h3 style={{ fontFamily: "var(--font)", fontSize: 20, margin: "0 0 16px" }}>
-        Start a new lot from harvest
+        {isFarmer ? "Add a harvest lot" : "Add a lot from a supplier"}
       </h3>
+      {!isFarmer && (
+        <p className="helper-note" style={{ marginTop: 0 }}>
+          The lot is linked to the supplier you choose so lineage traces back through them.
+        </p>
+      )}
       <form onSubmit={submit}>
+        {!isFarmer && (
+          <div className="field">
+            <label htmlFor="al-supplier">Supplier</label>
+            {suppliers.length === 0 ? (
+              <p className="warn-note" style={{ margin: 0 }}>
+                {sessionRole === "akrabi"
+                  ? "Onboard a farmer first, then add a lot from them."
+                  : "Onboard an aggregator first, then add a lot from them."}
+              </p>
+            ) : (
+              <select
+                id="al-supplier"
+                value={supplierId}
+                onChange={(e) => setSupplierId(e.target.value)}
+                required
+              >
+                {suppliers.map((a) => (
+                  <option key={a.actorId} value={a.actorId}>
+                    {displayActorName(ledger, a.actorId, sessionRole)}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
         <div className="field">
-          <label htmlFor="nl-farmer">Farmer</label>
-          <select id="nl-farmer" value={farmerId} onChange={(e) => setFarmerId(e.target.value)}>
-            {actors.map((a) => (
-              <option key={a.actorId} value={a.actorId}>
-                {a.displayName} ({a.actorType})
+          <label htmlFor="al-mass">Mass (kg)</label>
+          <input
+            id="al-mass"
+            type="number"
+            min={0.01}
+            step={0.01}
+            value={massKg}
+            onChange={(e) => setMassKg(e.target.value)}
+            required
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="al-state">Form</label>
+          <select
+            id="al-state"
+            value={processingState}
+            onChange={(e) => setProcessingState(e.target.value as ProcessingState)}
+          >
+            {(
+              [
+                "cherry",
+                "wet_parchment",
+                "dry_parchment",
+                "dried_cherry",
+                "green_washed",
+                "green_natural",
+              ] as ProcessingState[]
+            ).map((s) => (
+              <option key={s} value={s}>
+                {stateLabel(s)}
               </option>
             ))}
           </select>
         </div>
-        <p className="helper-note">
-          {farmerId === actingActorId
-            ? "You are the farmer. This will be marked farmer-verified."
-            : `Recording on behalf of ${actorLabel(ledger, farmerId)}. Marked as recorded by a counterparty until confirmed.`}
-        </p>
         <div className="field">
-          <label htmlFor="nl-mass">Mass (kg)</label>
-          <input
-            id="nl-mass"
-            type="number"
-            value={massKg}
-            min={0.01}
-            step={0.01}
-            onChange={(e) => setMassKg(e.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="nl-state">Form it&apos;s in</label>
+          <label htmlFor="al-route">Route</label>
           <select
-            id="nl-state"
-            value={processingState}
-            onChange={(e) => setProcessingState(e.target.value as ProcessingState)}
-          >
-            <option value="cherry">Cherry</option>
-            <option value="dried_cherry">Dried cherry</option>
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="nl-route">Route</label>
-          <select
-            id="nl-route"
+            id="al-route"
             value={processingRoute}
             onChange={(e) => setProcessingRoute(e.target.value as ProcessingRoute)}
           >
-            <option value="washed">Washed</option>
-            <option value="natural">Natural</option>
-            <option value="unknown_at_origin">Not decided yet</option>
+            <option value="washed">{routeLabel("washed")}</option>
+            <option value="natural">{routeLabel("natural")}</option>
+            <option value="unknown_at_origin">{routeLabel("unknown_at_origin")}</option>
           </select>
         </div>
         <div className="field">
-          <label htmlFor="nl-crop">Crop year</label>
+          <label htmlFor="al-loc">Location</label>
           <input
-            id="nl-crop"
+            id="al-loc"
+            type="text"
+            value={locationId}
+            onChange={(e) => setLocationId(e.target.value)}
+            placeholder={isFarmer ? "field entry" : "intake warehouse"}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="al-year">Crop year</label>
+          <input
+            id="al-year"
             type="text"
             value={cropYear}
             onChange={(e) => setCropYear(e.target.value)}
+            required
           />
         </div>
-        <button type="submit">Create lot</button>
+        <button type="submit" disabled={!isFarmer && suppliers.length === 0}>
+          {isFarmer ? "Create lot" : "Record intake lot"}
+        </button>
       </form>
     </div>
   );
@@ -897,6 +968,7 @@ function SendForm({
   onBack: () => void;
   clearSelection: () => void;
 }) {
+  const { sessionRole } = useLedger();
   const others = allowedSendTargets(ledger, actingActorId);
   const [toId, setToId] = useState(others[0]?.actorId ?? "");
   const [mass, setMass] = useState(String(lot.canonicalMassKg));
@@ -920,7 +992,7 @@ function SendForm({
       clearSelection();
       refresh();
       toast(
-        `${lotCode(lot.lotId)} sent to ${actorLabel(ledger, toId)}. Waiting for confirmation.`,
+        `${lotCode(lot.lotId)} sent to ${displayActorName(ledger, toId, sessionRole)}. Waiting for confirmation.`,
       );
     } catch (err) {
       catchInv(err, toast);
@@ -944,7 +1016,7 @@ function SendForm({
           <select id="ms-to" value={toId} onChange={(e) => setToId(e.target.value)}>
             {others.map((a) => (
               <option key={a.actorId} value={a.actorId}>
-                {a.displayName} ({a.actorType})
+                {displayActorName(ledger, a.actorId, sessionRole)}
               </option>
             ))}
           </select>
@@ -1348,6 +1420,7 @@ function TransferForm({
   onBack: () => void;
   keepSelection: () => void;
 }) {
+  const { sessionRole } = useLedger();
   const others = allowedSendTargets(ledger, lot.custodianActorId).filter(
     (a) => a.actorId !== lot.ownerActorId,
   );
@@ -1381,7 +1454,9 @@ function TransferForm({
       });
       keepSelection();
       refresh();
-      toast(`${lotCode(lot.lotId)} now owned by ${actorLabel(ledger, ownerId)}.`);
+      toast(
+        `${lotCode(lot.lotId)} now owned by ${displayActorName(ledger, ownerId, sessionRole)}.`,
+      );
     } catch (err) {
       catchInv(err, toast);
     }
@@ -1396,8 +1471,8 @@ function TransferForm({
         Transfer ownership of {lotCode(lot.lotId)}
       </h3>
       <p className="helper-note">
-        Currently owned by {actorLabel(ledger, lot.ownerActorId)}. Custody and location stay the
-        same.
+        Currently owned by {displayActorName(ledger, lot.ownerActorId, sessionRole)}. Custody and
+        location stay the same.
       </p>
       {transferTargets.length === 0 ? (
         <p className="warn-note">No allowed owners for this role.</p>
@@ -1408,7 +1483,7 @@ function TransferForm({
           <select id="to-owner" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
             {transferTargets.map((a) => (
               <option key={a.actorId} value={a.actorId}>
-                {a.displayName} ({a.actorType})
+                {displayActorName(ledger, a.actorId, sessionRole)}
               </option>
             ))}
           </select>

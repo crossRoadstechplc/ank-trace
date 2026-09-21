@@ -9,23 +9,7 @@ import {
   type SessionRole,
 } from "@/lib/role-session";
 
-const ROLES: { id: SessionRole; title: string; blurb: string }[] = [
-  {
-    id: "farmer",
-    title: SESSION_ROLE_LABELS.farmer,
-    blurb: "Your farm, lots in your custody, and cherry sent to your aggregator.",
-  },
-  {
-    id: "akrabi",
-    title: SESSION_ROLE_LABELS.akrabi,
-    blurb: "Farmers you sponsored. Receive, process, and send toward the exporter.",
-  },
-  {
-    id: "exporter",
-    title: SESSION_ROLE_LABELS.exporter,
-    blurb: "Aggregators you sponsored. Receive green and close at FOB. Farmer names stay hidden.",
-  },
-];
+const ROLES: SessionRole[] = ["farmer", "akrabi", "exporter"];
 
 type Step = "role" | "actor";
 
@@ -99,10 +83,6 @@ export function RoleSelect() {
           </div>
           <div className="masthead-copy">
             <h1>Select a role</h1>
-            <p>
-              Farmer and Aggregator each have three demo identities. Exporter uses
-              your signed-in name on the rich seed profile.
-            </p>
           </div>
         </div>
       </header>
@@ -110,15 +90,14 @@ export function RoleSelect() {
       <main className="login-main role-select-main">
         {step === "role" ? (
           <div className="role-card-grid">
-            {ROLES.map((r) => (
+            {ROLES.map((id) => (
               <button
-                key={r.id}
+                key={id}
                 type="button"
                 className="role-pick-card"
-                onClick={() => pickRole(r.id)}
+                onClick={() => pickRole(id)}
               >
-                <div className="role-pick-title">{r.title}</div>
-                <div className="role-pick-blurb">{r.blurb}</div>
+                <div className="role-pick-title">{SESSION_ROLE_LABELS[id]}</div>
               </button>
             ))}
           </div>
@@ -127,7 +106,6 @@ export function RoleSelect() {
             <h2 className="section-title">
               Select {role ? SESSION_ROLE_LABELS[role] : "actor"}
             </h2>
-            <p className="helper-note">Choose an identity to work as.</p>
             {candidates.length === 0 ? (
               <div className="empty-state">No identities for this role.</div>
             ) : (

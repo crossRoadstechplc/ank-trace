@@ -35,6 +35,7 @@ export type TerminalReason = "fob_export" | "domestic_disposition" | "destroyed"
 export type EventType =
   | "actor_onboarded"
   | "origin_lot_created"
+  | "intake_lot_recorded"
   | "movement_send"
   | "movement_receive"
   | "ownership_transfer"
@@ -120,6 +121,18 @@ export interface Discrepancy {
 export interface CreateOriginLotParams {
   farmerActorId: string;
   recordedByActorId: string;
+  executingPersonId: string;
+  massKg: number;
+  processingState: ProcessingState;
+  processingRoute: ProcessingRoute;
+  locationId: string;
+  cropYear: string;
+}
+
+/** Mid/downstream intake: lot enters receiver custody with lineage back through supplier. */
+export interface CreateIntakeLotParams {
+  supplierActorId: string;
+  receiverActorId: string;
   executingPersonId: string;
   massKg: number;
   processingState: ProcessingState;

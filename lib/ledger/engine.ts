@@ -5,6 +5,7 @@ import type {
   AggregateParams,
   CorrectEventParams,
   CreateOriginLotParams,
+  CreateIntakeLotParams,
   DisaggregateParams,
   Discrepancy,
   Event,
@@ -170,6 +171,113 @@ export class Ledger {
     };
     this.lots.set(lot.lotId, lot);
     return lot;
+  }
+
+  /**
+   * Record an intake lot for an aggregator/exporter: creates farmer origin,
+   * moves through the immediate supplier, then into receiver custody with ownership.
+   * Lineage and movements both point back to the supplier before.
+   */
+  createIntakeLot({
+    supplierActorId,
+    receiverActorId,
+    executingPersonId,
+    massKg,
+    processingState,
+    processingRoute,
+    locationId,
+    cropYear,
+  }: CreateIntakeLotParams): Lot {
+    const supplier = this.actors.get(supplierActorId);
+    const receiver = this.actors.get(receiverActorId);
+    if (!supplier) {
+      throw new InvariantViolation("INV-10", `Unknown supplier ${supplierActorId}.`);
+    }
+    if (!receiver) {
+      throw new InvariantViolation("INV-10", `Unknown receiver ${receiverActorId}.`);
+    }
+    if (massKg <= 0) {
+      throw new InvariantViolation("INV-07", "Intake mass must be positive.");
+    }
+
+    let farmerActorId: string;
+    if (supplier.actorType === "farmer") {
+      farmerActorId = supplier.actorId;
+    } else if (supplier.actorType === "akrabi") {
+      const farm = [...this.actors.values()].find(
+        (a) => a.actorType === "farmer" && a.sponsorActorId === supplier.actorId,
+      );
+      if (!farm) {
+        throw new InvariantViolation(
+          "INV-10",
+          `${supplier.displayName} has no farmers to attribute origin to.`,
+        );
+      }
+      farmerActorId = farm.actorId;
+    } else {
+      throw new InvariantViolation(
+        "INV-10",
+        `Intake supplier must be a farmer or aggregator (got ${supplier.actorType}).`,
+      );
+    }
+
+    const origin = this.createOriginLot({
+      farmerActorId,
+      recordedByActorId: receiverActorId,
+      executingPersonId,
+      massKg,
+      processingState,
+      processingRoute,
+      locationId,
+      cropYear,
+    });
+
+    const hop = (fromId: string, toId: string, dest: string) => {
+      const mid = this.movementSend({
+        lotId: origin.lotId,
+        fromActorId: fromId,
+        toActorId: toId,
+        senderDeclaredKg: origin.canonicalMassKg,
+        executingPersonId: fromId,
+        destinationLocationId: dest,
+      });
+      this.movementReceive({
+        movementId: mid,
+        receiverDeclaredKg: origin.canonicalMassKg,
+        executingPersonId: toId,
+      });
+    };
+
+    // Farmer → aggregator (when supplier is akrabi), then supplier → receiver.
+    if (supplier.actorType === "akrabi" && farmerActorId !== supplier.actorId) {
+      hop(
+        farmerActorId,
+        supplier.actorId,
+        `${supplier.displayName} store`,
+      );
+    }
+
+    if (origin.custodianActorId !== receiverActorId) {
+      hop(origin.custodianActorId, receiverActorId, locationId);
+    }
+
+    if (origin.ownerActorId !== receiverActorId) {
+      this.transferOwnership({
+        lotId: origin.lotId,
+        newOwnerActorId: receiverActorId,
+        executingPersonId,
+        actingActorId: receiverActorId,
+      });
+    }
+
+    this._commit("intake_lot_recorded", executingPersonId, receiverActorId, {
+      lotId: origin.lotId,
+      supplierActorId,
+      farmerActorId,
+      massKg: origin.canonicalMassKg,
+    });
+
+    return origin;
   }
 
   movementSend({

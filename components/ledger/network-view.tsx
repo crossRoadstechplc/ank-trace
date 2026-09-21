@@ -6,6 +6,7 @@ import {
   METADATA_FIELDS,
   actorDeliveriesTo,
   actorTypeLabel,
+  displayActorName,
   fmtKg,
   formatEventTime,
   sponsoredBy,
@@ -37,8 +38,8 @@ export function NetworkView() {
     sessionRole === "farmer"
       ? "Your farm profile."
       : sessionRole === "akrabi"
-        ? "Farmers and processing sites you sponsored."
-        : "Processing sites under each aggregator. Farmer names stay hidden.";
+        ? "Farmers and processing sites you sponsored (shown as Farmer 1, Farmer 2…)."
+        : "Aggregators in your network (Aggregator 1…) and their farms (Farmer 1…).";
 
   function toggleSection(id: string) {
     setExpanded((prev) => {
@@ -62,9 +63,9 @@ export function NetworkView() {
     const stations = children.filter(
       (c) => c.actorType === "washing_station" || c.actorType === "mill",
     );
-    const farmers = children.filter((c) => c.actorType === "farmer");
-    // Exporters never see farmer cards in the cascade.
-    if (sessionRole === "exporter") return stations;
+    const farmers = children
+      .filter((c) => c.actorType === "farmer")
+      .sort((a, b) => a.legalIdentityRef.localeCompare(b.legalIdentityRef));
     return [...stations, ...farmers];
   }
 
@@ -134,12 +135,16 @@ export function NetworkView() {
                       <b>
                         {akrabi.actorId === actingActorId
                           ? actingDisplayName
-                          : akrabi.displayName}
+                          : displayActorName(ledger, akrabi.actorId, sessionRole)}
                       </b>
                     </div>
                     <div className="net-head-sub">
-                      {loc}
-                      {loc ? " · " : ""}
+                      {sessionRole === "exporter" ? null : loc ? (
+                        <>
+                          {loc}
+                          {" · "}
+                        </>
+                      ) : null}
                       {sessionRole === "exporter" ? (
                         <>
                           <b>{stations.length}</b> processing site
@@ -148,7 +153,7 @@ export function NetworkView() {
                             <>
                               {" "}
                               · <b>{farmers.length}</b> farm
-                              {farmers.length !== 1 ? "s" : ""} (identities protected)
+                              {farmers.length !== 1 ? "s" : ""}
                             </>
                           ) : null}
                         </>
@@ -173,6 +178,11 @@ export function NetworkView() {
                     <NetworkCard
                       key={c.actorId}
                       actor={c}
+                      label={
+                        c.actorType === "farmer" || c.actorType === "akrabi"
+                          ? displayActorName(ledger, c.actorId, sessionRole)
+                          : undefined
+                      }
                       onOpen={() => setProfileId(c.actorId)}
                     />
                   ))}
@@ -188,12 +198,10 @@ export function NetworkView() {
           actorId={profileId}
           onClose={() => setProfileId(null)}
           onOpenActor={(id) => {
-            const target = ledger.actors.get(id);
-            if (sessionRole === "exporter" && target?.actorType === "farmer") return;
             setProfileId(id);
           }}
           lotCode={lotCode}
-          allowChildren={sessionRole !== "exporter"}
+          allowChildren={true}
         />
       )}
     </div>
@@ -257,32 +265,34 @@ function ActorProfileModal({
   const actor = ledger.actors.get(actorId);
   if (!actor) return null;
 
-  if (sessionRole === "exporter" && actor.actorType === "farmer") {
-    return (
-      <div className="modal-overlay show" role="dialog" aria-modal="true">
-        <div className="modal">
-          <h3>Hidden</h3>
-          <p className="helper-note">Farmer names are not shown to exporters.</p>
-          <button type="button" className="secondary" onClick={onClose}>
-            Close
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   const meta = actor.metadata || {};
   const fields = METADATA_FIELDS[actor.actorType] || [];
   const sponsor = actor.sponsorActorId ? ledger.actors.get(actor.sponsorActorId) : null;
   const children = allowChildren
-    ? sponsoredBy(ledger, actorId).filter((c) =>
-        sessionRole === "akrabi" ? c.actorType === "farmer" || c.actorType === "washing_station" || c.actorType === "mill" : true,
-      )
+    ? sponsoredBy(ledger, actorId)
+        .filter((c) =>
+          sessionRole === "akrabi"
+            ? c.actorType === "farmer" ||
+              c.actorType === "washing_station" ||
+              c.actorType === "mill"
+            : sessionRole === "exporter"
+              ? c.actorType === "farmer" ||
+                c.actorType === "washing_station" ||
+                c.actorType === "mill"
+              : true,
+        )
+        .sort((a, b) => a.legalIdentityRef.localeCompare(b.legalIdentityRef))
     : [];
 
-  const metaRows = fields.filter(([key]) => meta[key]);
+  const metaRows =
+    sessionRole === "exporter" || sessionRole === "akrabi"
+      ? // Keep operational fields; drop personal contact-style names from farmer cards.
+        fields.filter(([key]) => meta[key] && key !== "phone" && key !== "contactPerson")
+      : fields.filter(([key]) => meta[key]);
   const titleName =
-    actorId === actingActorId ? actingDisplayName : actor.displayName;
+    actorId === actingActorId
+      ? actingDisplayName
+      : displayActorName(ledger, actorId, sessionRole);
 
   return (
     <div className="modal-overlay show" role="dialog" aria-modal="true">
@@ -296,7 +306,8 @@ function ActorProfileModal({
           {sponsor && sessionRole !== "exporter" ? (
             <>
               {" "}
-              · Onboarded by <b>{sponsor.displayName}</b>
+              · Onboarded by{" "}
+              <b>{displayActorName(ledger, sponsor.actorId, sessionRole)}</b>
             </>
           ) : null}
           {sponsor && sessionRole === "exporter" && actor.actorType === "akrabi" ? (
@@ -316,15 +327,10 @@ function ActorProfileModal({
         {actingActorId !== actorId && (
           <DeliveryHistory actorId={actorId} lotCode={lotCode} />
         )}
-        {sessionRole === "exporter" && actor.actorType === "akrabi" && (
-          <p className="helper-note" style={{ marginTop: 14 }}>
-            Farmer names under this aggregator are hidden.
-          </p>
-        )}
         {children.length > 0 && (
           <>
             <h3 className="subhead" style={{ marginTop: 18 }}>
-              Onboarded by {actor.displayName}
+              In {titleName}&apos;s network
             </h3>
             {children.map((c) => (
               <div className="lt-row-kv" key={c.actorId}>
@@ -334,7 +340,9 @@ function ActorProfileModal({
                   style={{ cursor: "pointer", textDecoration: "underline" }}
                   onClick={() => onOpenActor(c.actorId)}
                 >
-                  {c.displayName}
+                  {c.actorType === "farmer" || c.actorType === "akrabi"
+                    ? displayActorName(ledger, c.actorId, sessionRole)
+                    : c.displayName}
                 </span>
               </div>
             ))}
