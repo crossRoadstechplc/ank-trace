@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { BusyLabel } from "@/components/spinner";
 
 type Step = "details" | "otp";
 
@@ -150,7 +151,9 @@ export function LoginForm() {
             {error && <p className="warn-note">{error}</p>}
             {message && <p className="helper-note">{message}</p>}
             <button type="submit" disabled={busy}>
-              {busy ? "Sending..." : "Send login code"}
+              <BusyLabel busy={busy} busyText="Sending…">
+                Send login code
+              </BusyLabel>
             </button>
           </form>
         ) : (
@@ -188,7 +191,9 @@ export function LoginForm() {
             {message && <p className="helper-note">{message}</p>}
             <div className="btn-row">
               <button type="submit" disabled={busy}>
-                {busy ? "Verifying..." : "Sign in"}
+                <BusyLabel busy={busy} busyText="Verifying…">
+                  Sign in
+                </BusyLabel>
               </button>
               <button
                 type="button"

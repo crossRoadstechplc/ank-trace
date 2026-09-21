@@ -155,6 +155,7 @@ function numberedLabel(actor: Actor, peers: Actor[]): string {
 
 /**
  * Display name for UI. Mid/downstream roles see Farmer N / Collector N / Aggregator N.
+ * User-onboarded parties also show the entered name: "Collector 4 · Abebe".
  */
 export function displayActorName(
   ledger: Ledger,
@@ -172,7 +173,12 @@ export function displayActorName(
       actor.actorType === "collector" ||
       actor.actorType === "akrabi")
   ) {
-    return numberedLabel(actor, numberedPeers(ledger, actor));
+    const num = numberedLabel(actor, numberedPeers(ledger, actor));
+    const name = String(actor.displayName || "").trim();
+    if (actor.metadata?.userOnboarded === "true" && name) {
+      return `${num} · ${name}`;
+    }
+    return num;
   }
 
   return actor.displayName;

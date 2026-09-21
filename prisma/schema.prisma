@@ -45,3 +45,111 @@ model LoginEvent {
 
   @@index([userId, loggedInAt])
 }
+
+/// Singleton row tracking whether the demo network ledger has been seeded.
+model LedgerMeta {
+  id                   String    @id @default("default")
+  seededAt             DateTime?
+  schemaVersion        Int       @default(1)
+  preferredTraceLotId  String?
+  actingActorId        String?
+  updatedAt            DateTime  @updatedAt
+}
+
+model NetworkActor {
+  id               String   @id
+  actorType        String
+  displayName      String
+  legalIdentityRef String   @unique
+  status           String   @default("active")
+  sponsorId        String?
+  metadata         Json     @default("{}")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([sponsorId])
+  @@index([actorType])
+}
+
+model NetworkLot {
+  id                String   @id
+  commodity         String   @default("coffee")
+  processingState   String
+  processingRoute   String
+  status            String
+  canonicalMassKg   Float
+  ownerActorId      String
+  custodianActorId  String
+  locationId        String
+  originLocationId  String?
+  cropYear          String
+  originStatus      String
+  createdEventId    String
+  provenance        Json     @default("{}")
+  inactiveEventId   String?
+  inTransit         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([ownerActorId])
+  @@index([custodianActorId])
+  @@index([status])
+}
+
+model NetworkEvent {
+  id                String   @id
+  eventType         String
+  eventTime         DateTime
+  recordTime        DateTime
+  executingPersonId String
+  onBehalfOfActorId String
+  payload           Json     @default("{}")
+  correctsEventId   String?
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
+
+  @@index([eventType])
+  @@index([sortOrder])
+}
+
+model NetworkMovement {
+  id                     String   @id
+  lotId                  String
+  fromActorId            String
+  toActorId              String
+  senderDeclaredKg       Float
+  destinationLocationId  String
+  state                  String
+  receiverDeclaredKg     Float?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([lotId])
+  @@index([toActorId])
+  @@index([state])
+}
+
+model NetworkLineage {
+  id             String @id @default(cuid())
+  parentLotId    String
+  childLotId     String
+  contributionKg Float
+  proportion     Float
+
+  @@index([parentLotId])
+  @@index([childLotId])
+  @@unique([parentLotId, childLotId])
+}
+
+model NetworkDiscrepancy {
+  id          String @id
+  movementId  String
+  lotId       String
+  senderKg    Float
+  receiverKg  Float
+  deltaKg     Float
+  status      String
+
+  @@index([movementId])
+  @@index([lotId])
+}

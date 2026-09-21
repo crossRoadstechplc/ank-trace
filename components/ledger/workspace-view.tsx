@@ -16,12 +16,46 @@ import {
   routeLabel,
   stateLabel,
   type Lot,
+  type Movement,
   type ProcessingRoute,
   type ProcessingState,
   type TerminalReason,
 } from "@/lib/ledger";
+import {
+  postLedgerActor,
+  postLedgerCommand,
+  postLedgerLot,
+  type LedgerApiResponse,
+} from "@/lib/ledger/api-client";
+import { getClientLedger } from "@/lib/ledger/client-store";
+import { BusyLabel } from "@/components/spinner";
 import { useLedger } from "./ledger-context";
 import type { SessionRole } from "@/lib/role-session";
+
+type RefreshFn = (from?: LedgerApiResponse) => Promise<void>;
+
+function codeAfter(lotId: string, fallback: (id: string) => string): string {
+  try {
+    return getClientLedger().lotCode(lotId);
+  } catch {
+    return fallback(lotId);
+  }
+}
+
+/** Wrap an async submit; returns busy flag for button state. */
+function useBusySubmit() {
+  const [busy, setBusy] = useState(false);
+  async function run(action: () => Promise<void>) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await action();
+    } finally {
+      setBusy(false);
+    }
+  }
+  return { busy, run };
+}
 
 type Action =
   | null
@@ -405,7 +439,7 @@ function AddAkrabiForm({
   onCancel: () => void;
   actingActorId: string;
   ledger: ReturnType<typeof useLedger>["ledger"];
-  refresh: () => void;
+  refresh: RefreshFn;
   toast: (m: string, e?: boolean) => void;
 }) {
   const [name, setName] = useState("");
@@ -419,34 +453,55 @@ function AddAkrabiForm({
   const [facilityKebele, setFacilityKebele] = useState("");
   const [facilityCapacity, setFacilityCapacity] = useState("");
   const [facilityOperator, setFacilityOperator] = useState("");
+  const { busy, run } = useBusySubmit();
 
-  function submit(e: FormEvent) {
+  const { focusNetworkActor } = useLedger();
+
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    try {
-      if (!name.trim() || !ref.trim()) {
-        throw new Error("Name and registration reference are both required.");
-      }
-      const akrabi = ledger.onboardActor("akrabi", name.trim(), ref.trim(), actingActorId, {
-        region: region.trim(),
-        zone: zone.trim(),
-        woreda: woreda.trim(),
-        yearsOperating: years.trim(),
-      });
-      if (facilityName.trim()) {
-        ledger.onboardActor(facilityType, facilityName.trim(), `${ref.trim()}-SITE`, akrabi.actorId, {
-          region: region.trim(),
-          zone: zone.trim(),
-          woreda: woreda.trim(),
-          kebele: facilityKebele.trim(),
-          capacityKgPerDay: facilityCapacity.trim(),
-          operator: facilityOperator.trim(),
+    await run(async () => {
+      try {
+        if (!name.trim() || !ref.trim()) {
+          throw new Error("Name and registration reference are both required.");
+        }
+        const res = await postLedgerActor({
+          actorType: "akrabi",
+          displayName: name.trim(),
+          legalIdentityRef: ref.trim(),
+          sponsorActorId: actingActorId,
+          metadata: {
+            region: region.trim(),
+            zone: zone.trim(),
+            woreda: woreda.trim(),
+            yearsOperating: years.trim(),
+            userOnboarded: "true",
+          },
+          facility: facilityName.trim()
+            ? {
+                actorType: facilityType,
+                displayName: facilityName.trim(),
+                legalIdentityRef: `${ref.trim()}-SITE`,
+                metadata: {
+                  region: region.trim(),
+                  zone: zone.trim(),
+                  woreda: woreda.trim(),
+                  kebele: facilityKebele.trim(),
+                  capacityKgPerDay: facilityCapacity.trim(),
+                  operator: facilityOperator.trim(),
+                },
+              }
+            : undefined,
         });
+        await refresh(res);
+        const akrabi = res.actor;
+        if (!akrabi) throw new Error("Onboard succeeded but no actor returned.");
+        focusNetworkActor(akrabi.actorId);
+        onCancel();
+        toast(`${akrabi.displayName} added to your network.`);
+      } catch (err) {
+        catchInv(err, toast);
       }
-      onCancel();
-      toast(`${akrabi.displayName} added to your network.`);
-    } catch (err) {
-      catchInv(err, toast);
-    }
+    });
   }
 
   return (
@@ -576,7 +631,11 @@ function AddAkrabiForm({
             placeholder="Operator name"
           />
         </div>
-        <button type="submit">Add akrabi</button>
+        <button type="submit" disabled={busy}>
+          <BusyLabel busy={busy} busyText="Saving…">
+            Add akrabi
+          </BusyLabel>
+        </button>
       </form>
     </div>
   );
@@ -598,7 +657,7 @@ function AddLotForm({
   sessionRole: SessionRole;
   ledger: ReturnType<typeof useLedger>["ledger"];
   lotCode: (id: string) => string;
-  refresh: () => void;
+  refresh: RefreshFn;
   toast: (m: string, e?: boolean) => void;
   setSelectedLotId: (id: string | null) => void;
   setAction: (a: Action) => void;
@@ -620,52 +679,61 @@ function AddLotForm({
   const [locationId, setLocationId] = useState(
     isFarmer ? "field entry" : "intake warehouse",
   );
+  const { busy, run } = useBusySubmit();
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    try {
-      if (isFarmer) {
-        const lot = ledger.createOriginLot({
-          farmerActorId: actingActorId,
-          recordedByActorId: actingActorId,
+    await run(async () => {
+      try {
+        if (isFarmer) {
+          const res = await postLedgerLot({
+            kind: "origin",
+            farmerActorId: actingActorId,
+            recordedByActorId: actingActorId,
+            executingPersonId: actingActorId,
+            massKg: parseFloat(massKg),
+            processingState,
+            processingRoute,
+            locationId: locationId.trim() || "field entry",
+            cropYear: cropYear.trim(),
+          });
+          const lot = res.lot;
+          if (!lot) throw new Error("Lot create succeeded but no lot returned.");
+          setAction(null);
+          setSelectedLotId(lot.lotId);
+          await refresh(res);
+          toast(
+            `${codeAfter(lot.lotId, lotCode)} created: ${lot.canonicalMassKg}kg ${stateLabel(lot.processingState)}.`,
+          );
+          return;
+        }
+
+        if (!supplierId) {
+          throw new Error("Select the supplier this lot came from.");
+        }
+        const res = await postLedgerLot({
+          kind: "intake",
+          supplierActorId: supplierId,
+          receiverActorId: actingActorId,
           executingPersonId: actingActorId,
           massKg: parseFloat(massKg),
           processingState,
           processingRoute,
-          locationId: locationId.trim() || "field entry",
+          locationId: locationId.trim() || "intake warehouse",
           cropYear: cropYear.trim(),
         });
+        const lot = res.lot;
+        if (!lot) throw new Error("Lot create succeeded but no lot returned.");
         setAction(null);
         setSelectedLotId(lot.lotId);
-        refresh();
+        await refresh(res);
         toast(
-          `${lotCode(lot.lotId)} created: ${lot.canonicalMassKg}kg ${stateLabel(lot.processingState)}.`,
+          `${codeAfter(lot.lotId, lotCode)} intake recorded from ${displayActorName(ledger, supplierId, sessionRole)}: ${lot.canonicalMassKg}kg.`,
         );
-        return;
+      } catch (err) {
+        catchInv(err, toast);
       }
-
-      if (!supplierId) {
-        throw new Error("Select the supplier this lot came from.");
-      }
-      const lot = ledger.createIntakeLot({
-        supplierActorId: supplierId,
-        receiverActorId: actingActorId,
-        executingPersonId: actingActorId,
-        massKg: parseFloat(massKg),
-        processingState,
-        processingRoute,
-        locationId: locationId.trim() || "intake warehouse",
-        cropYear: cropYear.trim(),
-      });
-      setAction(null);
-      setSelectedLotId(lot.lotId);
-      refresh();
-      toast(
-        `${lotCode(lot.lotId)} intake recorded from ${displayActorName(ledger, supplierId, sessionRole)}: ${lot.canonicalMassKg}kg.`,
-      );
-    } catch (err) {
-      catchInv(err, toast);
-    }
+    });
   }
 
   return (
@@ -776,8 +844,10 @@ function AddLotForm({
             required
           />
         </div>
-        <button type="submit" disabled={!isFarmer && suppliers.length === 0}>
-          {isFarmer ? "Create lot" : "Record intake lot"}
+        <button type="submit" disabled={busy || (!isFarmer && suppliers.length === 0)}>
+          <BusyLabel busy={busy} busyText="Saving…">
+            {isFarmer ? "Create lot" : "Record intake lot"}
+          </BusyLabel>
         </button>
       </form>
     </div>
@@ -798,7 +868,7 @@ function ConfirmReceiptForm({
   onCancel: () => void;
   ledger: ReturnType<typeof useLedger>["ledger"];
   lotCode: (id: string) => string;
-  refresh: () => void;
+  refresh: RefreshFn;
   toast: (m: string, e?: boolean) => void;
   setAction: (a: Action) => void;
   setMovementId: (id: string | null) => void;
@@ -806,6 +876,7 @@ function ConfirmReceiptForm({
   const mv = ledger.movements.get(movementId);
   const lot = mv ? ledger.lots.get(mv.lotId) : undefined;
   const [mass, setMass] = useState(String(mv?.senderDeclaredKg ?? 0));
+  const { busy, run } = useBusySubmit();
 
   if (!mv || !lot) {
     return (
@@ -818,26 +889,30 @@ function ConfirmReceiptForm({
     );
   }
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    try {
-      const receiverDeclaredKg = parseFloat(mass);
-      const result = ledger.movementReceive({
-        movementId,
-        receiverDeclaredKg,
-        executingPersonId: mv!.toActorId,
-      });
-      setAction(null);
-      setMovementId(null);
-      refresh();
-      if (result.state === "received_clean") toast("Receipt confirmed. Weights match.");
-      else
-        toast(
-          `Receipt confirmed with a ${(receiverDeclaredKg - mv!.senderDeclaredKg).toFixed(2)}kg discrepancy. Both figures are kept.`,
-        );
-    } catch (err) {
-      catchInv(err, toast);
-    }
+    await run(async () => {
+      try {
+        const receiverDeclaredKg = parseFloat(mass);
+        const res = await postLedgerCommand({
+          command: "receive",
+          movementId,
+          receiverDeclaredKg,
+          executingPersonId: mv!.toActorId,
+        });
+        const result = res.result as Movement | undefined;
+        setAction(null);
+        setMovementId(null);
+        await refresh(res);
+        if (result?.state === "received_clean") toast("Receipt confirmed. Weights match.");
+        else
+          toast(
+            `Receipt confirmed with a ${(receiverDeclaredKg - mv!.senderDeclaredKg).toFixed(2)}kg discrepancy. Both figures are kept.`,
+          );
+      } catch (err) {
+        catchInv(err, toast);
+      }
+    });
   }
 
   return (
@@ -862,7 +937,11 @@ function ConfirmReceiptForm({
             onChange={(e) => setMass(e.target.value)}
           />
         </div>
-        <button type="submit">Confirm receipt</button>
+        <button type="submit" disabled={busy}>
+          <BusyLabel busy={busy} busyText="Confirming…">
+            Confirm receipt
+          </BusyLabel>
+        </button>
       </form>
     </div>
   );
@@ -885,7 +964,7 @@ function ActionForm({
   actingActorId: string;
   ledger: ReturnType<typeof useLedger>["ledger"];
   lotCode: (id: string) => string;
-  refresh: () => void;
+  refresh: RefreshFn;
   toast: (m: string, e?: boolean) => void;
   onBack: () => void;
   clearSelection: () => void;
@@ -981,7 +1060,7 @@ function SendForm({
   actingActorId: string;
   ledger: ReturnType<typeof useLedger>["ledger"];
   lotCode: (id: string) => string;
-  refresh: () => void;
+  refresh: RefreshFn;
   toast: (m: string, e?: boolean) => void;
   onBack: () => void;
   clearSelection: () => void;
@@ -991,30 +1070,34 @@ function SendForm({
   const [toId, setToId] = useState(others[0]?.actorId ?? "");
   const [mass, setMass] = useState(String(lot.canonicalMassKg));
   const [loc, setLoc] = useState("");
+  const { busy, run } = useBusySubmit();
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
     if (!toId) {
       toast("No allowed recipients for this role.", true);
       return;
     }
-    try {
-      ledger.movementSend({
-        lotId: lot.lotId,
-        fromActorId: lot.custodianActorId,
-        toActorId: toId,
-        senderDeclaredKg: parseFloat(mass),
-        executingPersonId: lot.custodianActorId,
-        destinationLocationId: loc.trim() || "unspecified location",
-      });
-      clearSelection();
-      refresh();
-      toast(
-        `${lotCode(lot.lotId)} sent to ${displayActorName(ledger, toId, sessionRole)}. Waiting for confirmation.`,
-      );
-    } catch (err) {
-      catchInv(err, toast);
-    }
+    await run(async () => {
+      try {
+        const res = await postLedgerCommand({
+          command: "send",
+          lotId: lot.lotId,
+          fromActorId: lot.custodianActorId,
+          toActorId: toId,
+          senderDeclaredKg: parseFloat(mass),
+          executingPersonId: lot.custodianActorId,
+          destinationLocationId: loc.trim() || "unspecified location",
+        });
+        clearSelection();
+        await refresh(res);
+        toast(
+          `${lotCode(lot.lotId)} sent to ${displayActorName(ledger, toId, sessionRole)}. Waiting for confirmation.`,
+        );
+      } catch (err) {
+        catchInv(err, toast);
+      }
+    });
   }
 
   return (
@@ -1062,7 +1145,11 @@ function SendForm({
         <p className="helper-note">
           The receiver will confirm the weight on arrival. A mismatch is logged as a discrepancy.
         </p>
-        <button type="submit">Send</button>
+        <button type="submit" disabled={busy}>
+          <BusyLabel busy={busy} busyText="Sending…">
+            Send
+          </BusyLabel>
+        </button>
       </form>
       )}
     </div>
@@ -1081,7 +1168,7 @@ function SplitForm({
   lot: Lot;
   ledger: ReturnType<typeof useLedger>["ledger"];
   lotCode: (id: string) => string;
-  refresh: () => void;
+  refresh: RefreshFn;
   toast: (m: string, e?: boolean) => void;
   onBack: () => void;
   clearSelection: () => void;
@@ -1090,22 +1177,27 @@ function SplitForm({
   const [rows, setRows] = useState<number[]>([half, half]);
   const sum = rows.reduce((a, b) => a + (Number(b) || 0), 0);
   const remainder = Math.round((lot.canonicalMassKg - sum) * 100) / 100;
+  const { busy, run } = useBusySubmit();
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    try {
-      const children = ledger.disaggregate({
-        parentLotId: lot.lotId,
-        childMassesKg: rows.map(Number),
-        executingPersonId: lot.custodianActorId,
-        actingActorId: lot.custodianActorId,
-      });
-      clearSelection();
-      refresh();
-      toast(`Split into ${children.map((c) => lotCode(c.lotId)).join(", ")}.`);
-    } catch (err) {
-      catchInv(err, toast);
-    }
+    await run(async () => {
+      try {
+        const res = await postLedgerCommand({
+          command: "disaggregate",
+          parentLotId: lot.lotId,
+          childMassesKg: rows.map(Number),
+          executingPersonId: lot.custodianActorId,
+          actingActorId: lot.custodianActorId,
+        });
+        const children = (res.result as Lot[] | undefined) ?? [];
+        clearSelection();
+        await refresh(res);
+        toast(`Split into ${children.map((c) => codeAfter(c.lotId, lotCode)).join(", ")}.`);
+      } catch (err) {
+        catchInv(err, toast);
+      }
+    });
   }
 
   return (
@@ -1159,8 +1251,10 @@ function SplitForm({
             ? "Fully allocated. Ready to split."
             : `Remaining to allocate: ${remainder}kg`}
         </div>
-        <button type="submit" disabled={remainder !== 0}>
-          Split lot
+        <button type="submit" disabled={busy || remainder !== 0}>
+          <BusyLabel busy={busy} busyText="Splitting…">
+            Split lot
+          </BusyLabel>
         </button>
       </form>
     </div>
@@ -1181,7 +1275,7 @@ function CombineForm({
   actingActorId: string;
   ledger: ReturnType<typeof useLedger>["ledger"];
   lotCode: (id: string) => string;
-  refresh: () => void;
+  refresh: RefreshFn;
   toast: (m: string, e?: boolean) => void;
   onBack: () => void;
   clearSelection: () => void;
@@ -1191,6 +1285,7 @@ function CombineForm({
   const running =
     lot.canonicalMassKg +
     [...selected].reduce((a, id) => a + (ledger.lots.get(id)?.canonicalMassKg ?? 0), 0);
+  const { busy, run } = useBusySubmit();
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -1201,21 +1296,26 @@ function CombineForm({
     });
   }
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    try {
-      const parentLotIds = [lot.lotId, ...selected];
-      const child = ledger.aggregate({
-        parentLotIds,
-        executingPersonId: lot.custodianActorId,
-        actingActorId: lot.custodianActorId,
-      });
-      clearSelection();
-      refresh();
-      toast(`Combined into ${lotCode(child.lotId)}, ${child.canonicalMassKg}kg.`);
-    } catch (err) {
-      catchInv(err, toast);
-    }
+    await run(async () => {
+      try {
+        const parentLotIds = [lot.lotId, ...selected];
+        const res = await postLedgerCommand({
+          command: "aggregate",
+          parentLotIds,
+          executingPersonId: lot.custodianActorId,
+          actingActorId: lot.custodianActorId,
+        });
+        const child = res.result as Lot | undefined;
+        if (!child) throw new Error("Combine succeeded but no lot returned.");
+        clearSelection();
+        await refresh(res);
+        toast(`Combined into ${codeAfter(child.lotId, lotCode)}, ${child.canonicalMassKg}kg.`);
+      } catch (err) {
+        catchInv(err, toast);
+      }
+    });
   }
 
   return (
@@ -1257,8 +1357,10 @@ function CombineForm({
           )}
         </div>
         <div className="running-total">Combined total so far: {running}kg</div>
-        <button type="submit" disabled={selected.size === 0}>
-          Combine {selected.size + 1} lots
+        <button type="submit" disabled={busy || selected.size === 0}>
+          <BusyLabel busy={busy} busyText="Combining…">
+            Combine {selected.size + 1} lots
+          </BusyLabel>
         </button>
       </form>
     </div>
@@ -1279,7 +1381,7 @@ function ProcessForm({
   actingActorId: string;
   ledger: ReturnType<typeof useLedger>["ledger"];
   lotCode: (id: string) => string;
-  refresh: () => void;
+  refresh: RefreshFn;
   toast: (m: string, e?: boolean) => void;
   onBack: () => void;
   clearSelection: () => void;
@@ -1288,6 +1390,7 @@ function ProcessForm({
   const [outState, setOutState] = useState<ProcessingState>("wet_parchment");
   const [reject, setReject] = useState("0");
   const [loss, setLoss] = useState("0");
+  const { busy, run } = useBusySubmit();
 
   const candidates = ledger
     .currentInventory(actingActorId)
@@ -1314,27 +1417,32 @@ function ProcessForm({
     });
   }
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    try {
-      const inputLotIds = [lot.lotId, ...extras];
-      const out = ledger.process({
-        inputLotIds,
-        outputState: outState,
-        outputMassKg: product,
-        rejectKg,
-        lossKg,
-        executingPersonId: lot.custodianActorId,
-        actingActorId: lot.custodianActorId,
-      });
-      clearSelection();
-      refresh();
-      toast(
-        `${lotCode(out.lotId)} produced: ${out.canonicalMassKg}kg ${stateLabel(out.processingState)}.`,
-      );
-    } catch (err) {
-      catchInv(err, toast);
-    }
+    await run(async () => {
+      try {
+        const inputLotIds = [lot.lotId, ...extras];
+        const res = await postLedgerCommand({
+          command: "process",
+          inputLotIds,
+          outputState: outState,
+          outputMassKg: product,
+          rejectKg,
+          lossKg,
+          executingPersonId: lot.custodianActorId,
+          actingActorId: lot.custodianActorId,
+        });
+        const out = res.result as Lot | undefined;
+        if (!out) throw new Error("Process succeeded but no lot returned.");
+        clearSelection();
+        await refresh(res);
+        toast(
+          `${codeAfter(out.lotId, lotCode)} produced: ${out.canonicalMassKg}kg ${stateLabel(out.processingState)}.`,
+        );
+      } catch (err) {
+        catchInv(err, toast);
+      }
+    });
   }
 
   return (
@@ -1413,8 +1521,10 @@ function ProcessForm({
           {product < 0 ? <br /> : null}
           {product < 0 ? "Reject + loss can't exceed total input." : ""}
         </div>
-        <button type="submit" disabled={product < 0}>
-          Process
+        <button type="submit" disabled={busy || product < 0}>
+          <BusyLabel busy={busy} busyText="Processing…">
+            Process
+          </BusyLabel>
         </button>
       </form>
     </div>
@@ -1433,7 +1543,7 @@ function TransferForm({
   lot: Lot;
   ledger: ReturnType<typeof useLedger>["ledger"];
   lotCode: (id: string) => string;
-  refresh: () => void;
+  refresh: RefreshFn;
   toast: (m: string, e?: boolean) => void;
   onBack: () => void;
   keepSelection: () => void;
@@ -1457,28 +1567,32 @@ function TransferForm({
           return false;
         });
   const [ownerId, setOwnerId] = useState(transferTargets[0]?.actorId ?? "");
+  const { busy, run } = useBusySubmit();
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
     if (!ownerId) {
       toast("No allowed owners for this role.", true);
       return;
     }
-    try {
-      ledger.transferOwnership({
-        lotId: lot.lotId,
-        newOwnerActorId: ownerId,
-        executingPersonId: lot.custodianActorId,
-        actingActorId: lot.custodianActorId,
-      });
-      keepSelection();
-      refresh();
-      toast(
-        `${lotCode(lot.lotId)} now owned by ${displayActorName(ledger, ownerId, sessionRole)}.`,
-      );
-    } catch (err) {
-      catchInv(err, toast);
-    }
+    await run(async () => {
+      try {
+        const res = await postLedgerCommand({
+          command: "transferOwnership",
+          lotId: lot.lotId,
+          newOwnerActorId: ownerId,
+          executingPersonId: lot.custodianActorId,
+          actingActorId: lot.custodianActorId,
+        });
+        keepSelection();
+        await refresh(res);
+        toast(
+          `${lotCode(lot.lotId)} now owned by ${displayActorName(ledger, ownerId, sessionRole)}.`,
+        );
+      } catch (err) {
+        catchInv(err, toast);
+      }
+    });
   }
 
   return (
@@ -1507,7 +1621,11 @@ function TransferForm({
             ))}
           </select>
         </div>
-        <button type="submit">Transfer</button>
+        <button type="submit" disabled={busy}>
+          <BusyLabel busy={busy} busyText="Transferring…">
+            Transfer
+          </BusyLabel>
+        </button>
       </form>
       )}
     </div>
@@ -1526,28 +1644,32 @@ function CloseForm({
   lot: Lot;
   ledger: ReturnType<typeof useLedger>["ledger"];
   lotCode: (id: string) => string;
-  refresh: () => void;
+  refresh: RefreshFn;
   toast: (m: string, e?: boolean) => void;
   onBack: () => void;
   clearSelection: () => void;
 }) {
   const [reason, setReason] = useState<TerminalReason>("fob_export");
+  const { busy, run } = useBusySubmit();
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    try {
-      ledger.terminalDispose({
-        lotId: lot.lotId,
-        reason,
-        executingPersonId: lot.custodianActorId,
-        actingActorId: lot.custodianActorId,
-      });
-      clearSelection();
-      refresh();
-      toast(`${lotCode(lot.lotId)} closed (${REASON_LABELS[reason]}).`);
-    } catch (err) {
-      catchInv(err, toast);
-    }
+    await run(async () => {
+      try {
+        const res = await postLedgerCommand({
+          command: "terminalDispose",
+          lotId: lot.lotId,
+          reason,
+          executingPersonId: lot.custodianActorId,
+          actingActorId: lot.custodianActorId,
+        });
+        clearSelection();
+        await refresh(res);
+        toast(`${lotCode(lot.lotId)} closed (${REASON_LABELS[reason]}).`);
+      } catch (err) {
+        catchInv(err, toast);
+      }
+    });
   }
 
   return (
@@ -1574,8 +1696,10 @@ function CloseForm({
             <option value="destroyed">Destroyed / lost</option>
           </select>
         </div>
-        <button type="submit" className="danger">
-          Close lot
+        <button type="submit" className="danger" disabled={busy}>
+          <BusyLabel busy={busy} busyText="Closing…">
+            Close lot
+          </BusyLabel>
         </button>
       </form>
     </div>

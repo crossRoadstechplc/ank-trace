@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { BusyLabel } from "@/components/spinner";
 
 type Lead = {
   id: string;
@@ -177,7 +178,9 @@ export function LeadsModal() {
             {error && <p className="warn-note">{error}</p>}
             <div className="btn-row">
               <button type="submit" disabled={busy}>
-                {busy ? "Checking..." : "Unlock"}
+                <BusyLabel busy={busy} busyText="Checking…">
+                  Unlock
+                </BusyLabel>
               </button>
               <button type="button" className="secondary" onClick={() => void closePanel()}>
                 Cancel

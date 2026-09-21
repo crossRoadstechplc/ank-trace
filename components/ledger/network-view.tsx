@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ACTOR_TYPE_LABELS,
   METADATA_FIELDS,
@@ -16,11 +16,52 @@ import {
 import { useLedger } from "./ledger-context";
 
 export function NetworkView() {
-  const { ledger, actingActorId, sessionRole, actingDisplayName, lotCode, version } = useLedger();
+  const {
+    ledger,
+    actingActorId,
+    sessionRole,
+    actingDisplayName,
+    lotCode,
+    version,
+    networkFocusActorId,
+    focusNetworkActor,
+  } = useLedger();
   const [profileId, setProfileId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
   const root = ledger.actors.get(actingActorId);
+
+  // After onboard: expand the right section and open the new actor's profile.
+  useEffect(() => {
+    if (!networkFocusActorId) return;
+    const focused = ledger.actors.get(networkFocusActorId);
+    if (!focused) {
+      focusNetworkActor(null);
+      return;
+    }
+
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (sessionRole === "collector") {
+        next.add(actingActorId);
+      } else if (sessionRole === "akrabi") {
+        if (focused.actorType === "collector") next.add(focused.actorId);
+        else if (focused.sponsorActorId) next.add(focused.sponsorActorId);
+      } else if (sessionRole === "exporter") {
+        if (focused.actorType === "akrabi") next.add(focused.actorId);
+        else if (focused.sponsorActorId) next.add(focused.sponsorActorId);
+      }
+      return next;
+    });
+    setProfileId(networkFocusActorId);
+    focusNetworkActor(null);
+  }, [
+    networkFocusActorId,
+    ledger,
+    sessionRole,
+    actingActorId,
+    focusNetworkActor,
+  ]);
 
   const sections = useMemo(() => {
     if (!root) return [] as Actor[];

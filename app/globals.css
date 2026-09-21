@@ -844,3 +844,58 @@
   .net-body.open { grid-template-columns: 1fr; }
 }
 
+/* Loading spinner */
+@keyframes ui-spin {
+  to { transform: rotate(360deg); }
+}
+.ui-spinner-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.ui-spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  border-style: solid;
+  border-color: currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: ui-spin 0.7s linear infinite;
+}
+.ui-spinner-label {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.ui-loading-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40vh;
+  padding: 48px 24px;
+  text-align: center;
+}
+.ui-loading-screen .ui-spinner-wrap {
+  flex-direction: column;
+  gap: 14px;
+}
+.ui-loading-screen .ui-spinner {
+  color: var(--ink);
+  opacity: 0.75;
+}
+.ui-busy-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+

@@ -1,7 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { actorsOfType, getClientLedger } from "@/lib/ledger";
+import { useEffect, useMemo, useState } from "react";
+import { actorsOfType, installClientLedger, peekClientLedger } from "@/lib/ledger";
+import { fetchLedgerSnapshot } from "@/lib/ledger/api-client";
+import type { BootstrapResult } from "@/lib/ledger/seed";
+import { LoadingScreen } from "@/components/spinner";
 import {
   SESSION_ROLE_LABELS,
   clearRoleSession,
@@ -14,20 +17,40 @@ const ROLES: SessionRole[] = ["farmer", "collector", "akrabi", "exporter"];
 type Step = "role" | "actor";
 
 export function RoleSelect() {
-  const boot = useMemo(() => getClientLedger(), []);
+  const [boot, setBoot] = useState<BootstrapResult | null>(() => peekClientLedger());
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("role");
   const [role, setRole] = useState<SessionRole | null>(null);
   const [busyLogout, setBusyLogout] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const payload = await fetchLedgerSnapshot();
+        if (cancelled) return;
+        setBoot(installClientLedger(payload.snapshot));
+        setLoadError(null);
+      } catch (err) {
+        if (cancelled) return;
+        setLoadError(err instanceof Error ? err.message : "Failed to load ledger.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const candidates = useMemo(() => {
-    if (!role || role === "exporter") return [];
+    if (!boot || !role || role === "exporter") return [];
     // Stable order for Farmer 1… / Aggregator 1… labels (not alphabetical names).
     return [...actorsOfType(boot.ledger, role)].sort((a, b) =>
       a.legalIdentityRef.localeCompare(b.legalIdentityRef),
     );
-  }, [boot.ledger, role]);
+  }, [boot, role]);
 
   function pickRole(r: SessionRole) {
+    if (!boot) return;
     if (r === "exporter") {
       const exporters = actorsOfType(boot.ledger, "exporter");
       const exporter = exporters[0];
@@ -41,7 +64,7 @@ export function RoleSelect() {
   }
 
   function pickActor(actorId: string) {
-    if (!role) return;
+    if (!role || !boot) return;
     const actor = boot.ledger.actors.get(actorId);
     if (!actor) return;
     setRoleSession({ role, legalIdentityRef: actor.legalIdentityRef });
@@ -63,6 +86,14 @@ export function RoleSelect() {
     } finally {
       window.location.href = "/";
     }
+  }
+
+  if (!boot) {
+    return (
+      <div className="login-shell">
+        <LoadingScreen message={loadError ?? "Loading network…"} />
+      </div>
+    );
   }
 
   return (

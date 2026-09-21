@@ -11,7 +11,9 @@ import {
   dashboardKicker,
   type ActorType,
 } from "@/lib/ledger";
+import { postLedgerActor, type LedgerApiResponse } from "@/lib/ledger/api-client";
 import { clearRoleSession, SESSION_ROLE_LABELS } from "@/lib/role-session";
+import { BusyLabel } from "@/components/spinner";
 import { useLedger } from "./ledger-context";
 
 type AppShellProps = {
@@ -38,6 +40,7 @@ export function AppShell({ children, userName, companyName, userContact }: AppSh
     toast,
     onboardOpen,
     setOnboardOpen,
+    focusNetworkActor,
   } = useLedger();
   const [busyLogout, setBusyLogout] = useState(false);
 
@@ -133,6 +136,7 @@ export function AppShell({ children, userName, companyName, userContact }: AppSh
           ledger={ledger}
           refresh={refresh}
           toast={toast}
+          focusNetworkActor={focusNetworkActor}
         />
       )}
     </>
@@ -145,12 +149,14 @@ function OnboardModal({
   ledger,
   refresh,
   toast,
+  focusNetworkActor,
 }: {
   onClose: () => void;
   actingActorId: string;
   ledger: ReturnType<typeof useLedger>["ledger"];
-  refresh: () => void;
+  refresh: (from?: LedgerApiResponse) => Promise<void>;
   toast: (msg: string, isError?: boolean) => void;
+  focusNetworkActor: (actorId: string | null) => void;
 }) {
   const actor = ledger.actors.get(actingActorId);
   const allowed = canOnboardTypes(ledger, actingActorId);
@@ -163,48 +169,53 @@ function OnboardModal({
   const [facilityKebele, setFacilityKebele] = useState("");
   const [facilityCapacity, setFacilityCapacity] = useState("");
   const [facilityOperator, setFacilityOperator] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const fields = actorType ? METADATA_FIELDS[actorType] ?? [] : [];
   const isAddAkrabi = actorType === "akrabi";
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!actorType) return;
+    if (!actorType || busy) return;
     if (!name.trim() || !legalRef.trim()) {
       toast("Name and registration reference are both required.", true);
       return;
     }
+    setBusy(true);
     try {
       const metadata: Record<string, string> = {};
       for (const [key, val] of Object.entries(meta)) {
         if (val.trim()) metadata[key] = val.trim();
       }
-      const a = ledger.onboardActor(actorType, name.trim(), legalRef.trim(), actingActorId, metadata);
-
-      if (isAddAkrabi && facilityName.trim()) {
-        ledger.onboardActor(
-          facilityType,
-          facilityName.trim(),
-          `${legalRef.trim()}-SITE`,
-          a.actorId,
-          {
-            region: metadata.region || "",
-            zone: metadata.zone || "",
-            woreda: metadata.woreda || "",
-            kebele: facilityKebele.trim(),
-            capacityKgPerDay: facilityCapacity.trim(),
-            operator: facilityOperator.trim(),
-          },
-        );
-      }
-
-      refresh();
+      const res = await postLedgerActor({
+        actorType,
+        displayName: name.trim(),
+        legalIdentityRef: legalRef.trim(),
+        sponsorActorId: actingActorId,
+        metadata: { ...metadata, userOnboarded: "true" },
+        facility:
+          isAddAkrabi && facilityName.trim()
+            ? {
+                actorType: facilityType,
+                displayName: facilityName.trim(),
+                legalIdentityRef: `${legalRef.trim()}-SITE`,
+                metadata: {
+                  region: metadata.region || "",
+                  zone: metadata.zone || "",
+                  woreda: metadata.woreda || "",
+                  kebele: facilityKebele.trim(),
+                  capacityKgPerDay: facilityCapacity.trim(),
+                  operator: facilityOperator.trim(),
+                },
+              }
+            : undefined,
+      });
+      await refresh(res);
+      const a = res.actor;
+      if (!a) throw new Error("Onboard succeeded but no actor returned.");
+      focusNetworkActor(a.actorId);
       onClose();
-      toast(
-        isAddAkrabi
-          ? `${a.displayName} added to your network.`
-          : `${a.displayName} added by ${actor?.displayName ?? actingActorId}.`,
-      );
+      toast(`${a.displayName} added to your network.`);
     } catch (err) {
       const msg =
         err instanceof InvariantViolation
@@ -213,6 +224,8 @@ function OnboardModal({
             ? err.message
             : "Could not onboard.";
       toast(msg, true);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -384,8 +397,12 @@ function OnboardModal({
             )}
 
             <div className="btn-row">
-              <button type="submit">{isAddAkrabi ? "Add aggregator" : "Add"}</button>
-              <button type="button" className="secondary" onClick={onClose}>
+              <button type="submit" disabled={busy}>
+                <BusyLabel busy={busy} busyText="Saving…">
+                  {isAddAkrabi ? "Add aggregator" : "Add"}
+                </BusyLabel>
+              </button>
+              <button type="button" className="secondary" onClick={onClose} disabled={busy}>
                 Cancel
               </button>
             </div>
