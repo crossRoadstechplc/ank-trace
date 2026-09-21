@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FormEvent, useMemo, useState, type ReactNode } from "react";
+import { FormEvent, useState, type ReactNode } from "react";
 import {
   ACTOR_TYPE_LABELS,
   InvariantViolation,
   METADATA_FIELDS,
   canOnboardTypes,
   dashboardKicker,
-  primaryWorkspaceAction,
   type ActorType,
 } from "@/lib/ledger";
 import { clearRoleSession, SESSION_ROLE_LABELS } from "@/lib/role-session";
@@ -30,19 +29,19 @@ const NAV = [
 
 export function AppShell({ children, userName, companyName, userContact }: AppShellProps) {
   const pathname = usePathname();
-  const { ledger, actingActorId, sessionRole, actingDisplayName, refresh, toast } = useLedger();
-  const [onboardOpen, setOnboardOpen] = useState(false);
+  const {
+    ledger,
+    actingActorId,
+    sessionRole,
+    actingDisplayName,
+    refresh,
+    toast,
+    onboardOpen,
+    setOnboardOpen,
+  } = useLedger();
   const [busyLogout, setBusyLogout] = useState(false);
 
   const actor = ledger.actors.get(actingActorId);
-  const primary = primaryWorkspaceAction(sessionRole);
-  const allowed = canOnboardTypes(ledger, actingActorId);
-
-  const onboardLabel = useMemo(() => {
-    if (primary === "addAkrabi") return "+ Add new akrabi";
-    if (primary === "addFarmer") return "+ Add new farmer";
-    return null;
-  }, [primary]);
 
   const personLabel = userName || userContact || "Signed in";
   const companyLabel = companyName || null;
@@ -105,11 +104,6 @@ export function AppShell({ children, userName, companyName, userContact }: AppSh
                 {actor?.legalIdentityRef ? ` · ${actor.legalIdentityRef}` : ""}
               </span>
             </div>
-            {onboardLabel && allowed.length > 0 && (
-              <button type="button" className="link-btn" onClick={() => setOnboardOpen(true)}>
-                {onboardLabel}
-              </button>
-            )}
           </div>
           <nav className="nav-tabs" aria-label="Primary">
             {NAV.map((item) => (
@@ -241,7 +235,7 @@ function OnboardModal({
           <form onSubmit={submit}>
             <h3>
               {isAddAkrabi
-                ? "Add a new akrabi"
+                ? "Add a new aggregator"
                 : allowed.length === 1
                   ? `Add a ${ACTOR_TYPE_LABELS[allowed[0]].toLowerCase()}`
                   : "Add to your network"}
@@ -270,7 +264,7 @@ function OnboardModal({
                 </select>
               </div>
             )}
-            {isAddAkrabi && <h3 className="subhead">Akrabi</h3>}
+            {isAddAkrabi && <h3 className="subhead">Aggregator</h3>}
             <div className="field">
               <label htmlFor="oa-name">Name</label>
               <input
@@ -380,7 +374,7 @@ function OnboardModal({
             )}
 
             <div className="btn-row">
-              <button type="submit">{isAddAkrabi ? "Add akrabi" : "Add"}</button>
+              <button type="submit">{isAddAkrabi ? "Add aggregator" : "Add"}</button>
               <button type="button" className="secondary" onClick={onClose}>
                 Cancel
               </button>

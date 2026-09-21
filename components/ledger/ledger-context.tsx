@@ -35,6 +35,8 @@ type LedgerContextValue = {
   refresh: () => void;
   version: number;
   toast: (msg: string, isError?: boolean) => void;
+  onboardOpen: boolean;
+  setOnboardOpen: (open: boolean) => void;
 };
 
 const LedgerContext = createContext<LedgerContextValue | null>(null);
@@ -68,6 +70,7 @@ export function LedgerProvider({
   const [version, setVersion] = useState(0);
   const [toastState, setToastState] = useState<ToastState | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
+  const [onboardOpen, setOnboardOpen] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -132,6 +135,8 @@ export function LedgerProvider({
       refresh,
       version,
       toast,
+      onboardOpen,
+      setOnboardOpen,
     }),
     [
       boot.ledger,
@@ -147,6 +152,7 @@ export function LedgerProvider({
       refresh,
       version,
       toast,
+      onboardOpen,
     ],
   );
 

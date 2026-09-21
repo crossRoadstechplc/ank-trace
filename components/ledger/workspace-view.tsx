@@ -8,6 +8,7 @@ import {
   actorLabel,
   allowedSendTargets,
   allowedIntakeSuppliers,
+  canOnboardTypes,
   displayActorName,
   fmtKg,
   immediateSupplierOf,
@@ -60,6 +61,7 @@ export function WorkspaceView() {
     refresh,
     toast,
     version,
+    setOnboardOpen,
   } = useLedger();
 
   const [action, setAction] = useState<Action>(null);
@@ -74,6 +76,13 @@ export function WorkspaceView() {
 
   const actor = ledger.actors.get(actingActorId);
   const primary = primaryWorkspaceAction(sessionRole);
+  const allowedOnboard = canOnboardTypes(ledger, actingActorId);
+  const onboardLabel =
+    sessionRole === "exporter" && allowedOnboard.includes("akrabi")
+      ? "+ Add new aggregator"
+      : sessionRole === "akrabi" && allowedOnboard.includes("farmer")
+        ? "+ Add new farmer"
+        : null;
   const incoming = useMemo(
     () =>
       [...ledger.movements.values()].filter(
@@ -132,6 +141,11 @@ export function WorkspaceView() {
         {primary === "newLot" && (
           <button type="button" onClick={openNewLot}>
             + Add a lot
+          </button>
+        )}
+        {onboardLabel && (
+          <button type="button" className="secondary" onClick={() => setOnboardOpen(true)}>
+            {onboardLabel}
           </button>
         )}
       </div>

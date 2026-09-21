@@ -255,7 +255,7 @@
   button.danger{ background:var(--warn); border-color:var(--warn); }
   button.danger:hover{ background:#8A1F1A; }
 
-  .primary-action{ margin-bottom:24px; }
+  .primary-action{ margin-bottom:24px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
 
   h2.section-title{ font-family:var(--font); font-size:18px; font-weight:600; margin:0 0 14px; letter-spacing:-0.02em; overflow-wrap:anywhere; }
   h3.subhead{ font-family:var(--font); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin:0 0 10px; }
