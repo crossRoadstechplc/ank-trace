@@ -43,10 +43,8 @@ export function RoleSelect() {
 
   const candidates = useMemo(() => {
     if (!boot || !role || role === "exporter") return [];
-    // Stable order for Farmer 1… / Aggregator 1… labels (not alphabetical names).
-    return [...actorsOfType(boot.ledger, role)].sort((a, b) =>
-      a.legalIdentityRef.localeCompare(b.legalIdentityRef),
-    );
+    // actorsOfType already sorts: demo picks first, then user-onboarded.
+    return actorsOfType(boot.ledger, role);
   }, [boot, role]);
 
   function pickRole(r: SessionRole) {
@@ -71,11 +69,21 @@ export function RoleSelect() {
     window.location.href = "/workspace";
   }
 
-  function candidateLabel(index: number): string {
-    if (role === "farmer") return `Farmer ${index + 1}`;
-    if (role === "collector") return `Collector ${index + 1}`;
-    if (role === "akrabi") return `Aggregator ${index + 1}`;
-    return `Option ${index + 1}`;
+  function candidateLabel(actor: (typeof candidates)[number], index: number): string {
+    const prefix =
+      role === "farmer"
+        ? "Farmer"
+        : role === "collector"
+          ? "Collector"
+          : role === "akrabi"
+            ? "Aggregator"
+            : "Option";
+    const base = `${prefix} ${index + 1}`;
+    if (actor.metadata?.userOnboarded === "true") {
+      const name = String(actor.displayName || "").trim();
+      return name ? `${base} · ${name}` : base;
+    }
+    return base;
   }
 
   async function signOut() {
@@ -149,7 +157,7 @@ export function RoleSelect() {
                     className="role-actor-row"
                     onClick={() => pickActor(a.actorId)}
                   >
-                    <b>{candidateLabel(i)}</b>
+                    <b>{candidateLabel(a, i)}</b>
                   </button>
                 ))}
               </div>

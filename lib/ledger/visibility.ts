@@ -7,18 +7,27 @@ export function actorsOfType(ledger: Ledger, type: ActorType): Actor[] {
   return [...ledger.actors.values()]
     .filter((a) => a.actorType === type)
     .filter((a) => {
-      // Role pick / demo lists: only seeded "good" actors with demoSelectable
+      // Role pick: seeded demo identities + parties the user onboarded.
       if (
         type === "farmer" ||
         type === "collector" ||
         type === "akrabi" ||
         type === "exporter"
       ) {
-        return a.metadata?.demoSelectable === "true";
+        return (
+          a.metadata?.demoSelectable === "true" ||
+          a.metadata?.userOnboarded === "true"
+        );
       }
       return true;
     })
-    .sort((a, b) => a.displayName.localeCompare(b.displayName));
+    .sort((a, b) => {
+      // Keep demo picks first; newly onboarded after (easier to find).
+      const aNew = a.metadata?.userOnboarded === "true" ? 1 : 0;
+      const bNew = b.metadata?.userOnboarded === "true" ? 1 : 0;
+      if (aNew !== bNew) return aNew - bNew;
+      return a.legalIdentityRef.localeCompare(b.legalIdentityRef);
+    });
 }
 
 /** Who appears in the Network view for the acting actor. */
